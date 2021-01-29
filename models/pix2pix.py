@@ -2,8 +2,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-from models.model import Model
-from utils import StatTracker
+from .model import Model
+from .utils import StatTracker
 
 
 def weights_init_normal(m):
@@ -178,6 +178,7 @@ class Pix2Pix(Model):
         self.optimizer_D.zero_grad()
         
         real_pred = self.discriminator(real_out, real_in)
+        fake_pred = self.discriminator(fake_out.detach(), real_in)
         loss_real = self.criterion_GAN(real_pred, valid)
         loss_fake = self.criterion_GAN(fake_pred, fake)
         
