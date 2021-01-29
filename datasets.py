@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import collections
 
 from torch.utils.data import Dataset
 from PIL import Image
@@ -46,8 +47,13 @@ class LandingZoneDataset(Dataset):
                 TF.rotate(TF.resize(TF.crop(image_gt, *RCParams_gt), self.outRes), angle, resample=Image.BILINEAR).float() / 255)
 
     def transform_compensated_rotate(self, image, image_gt):
-        batchSize, channels_img, _, img_res = image.size()
-        _, channels_gt, _, gt_res = image_gt.size()
+        if image.dim() == 3:
+            channels_img, _, img_res = image.size()
+            channels_gt, _, gt_res = image_gt.size()
+        else:
+            batchSize, channels_img, _, img_res = image.size()
+            _, channels_gt, _, gt_res = image_gt.size()
+
         sizeRatio = round(img_res / gt_res)
         
         # RandomResizedCrop returns a crop within the bounds of the image
@@ -65,8 +71,6 @@ class LandingZoneDataset(Dataset):
         w += 2 * cropMargin
 
         # pytorch / torchvision's crop doesn't support out-of-bounds coordinates, so we have to do it manually.
-        cropped_gt = image_gt.new_zeros((batchSize, channels_gt, h, w))
-        cropped_img = image.new_zeros((batchSize, channels_img, h * sizeRatio, w * sizeRatio))
 
         # Coordinates from which the pixels are copied in the original gt
         copyBox_gt = np.array([max(i, 0), min(gt_res, i + h), max(j, 0), min(gt_res, j + w)])
@@ -76,10 +80,22 @@ class LandingZoneDataset(Dataset):
         copyBox_img = copyBox_gt * sizeRatio
         pasteBox_img = pasteBox_gt * sizeRatio
 
-        cropped_gt[:, :, pasteBox_gt[0]:pasteBox_gt[1], pasteBox_gt[2]:pasteBox_gt[3]] = \
-            image_gt[:, :, copyBox_gt[0]:copyBox_gt[1], copyBox_gt[2]:copyBox_gt[3]]
-        cropped_img[:, :, pasteBox_img[0]:pasteBox_img[1], pasteBox_img[2]:pasteBox_img[3]] = \
-            image[:, :, copyBox_img[0]:copyBox_img[1], copyBox_img[2]:copyBox_img[3]]
+        if (image.dim() == 3):
+            cropped_gt = image_gt.new_zeros((channels_gt, h, w))
+            cropped_img = image.new_zeros((channels_img, h * sizeRatio, w * sizeRatio))
+
+            cropped_gt[:, pasteBox_gt[0]:pasteBox_gt[1], pasteBox_gt[2]:pasteBox_gt[3]] = \
+                image_gt[:, copyBox_gt[0]:copyBox_gt[1], copyBox_gt[2]:copyBox_gt[3]]
+            cropped_img[:, pasteBox_img[0]:pasteBox_img[1], pasteBox_img[2]:pasteBox_img[3]] = \
+                image[:, copyBox_img[0]:copyBox_img[1], copyBox_img[2]:copyBox_img[3]]
+        else:
+            cropped_gt = image_gt.new_zeros((batchSize, channels_gt, h, w))
+            cropped_img = image.new_zeros((batchSize, channels_img, h * sizeRatio, w * sizeRatio))
+
+            cropped_gt[:, :, pasteBox_gt[0]:pasteBox_gt[1], pasteBox_gt[2]:pasteBox_gt[3]] = \
+                image_gt[:, :, copyBox_gt[0]:copyBox_gt[1], copyBox_gt[2]:copyBox_gt[3]]
+            cropped_img[:, :, pasteBox_img[0]:pasteBox_img[1], pasteBox_img[2]:pasteBox_img[3]] = \
+                image[:, :, copyBox_img[0]:copyBox_img[1], copyBox_img[2]:copyBox_img[3]]
     
         resMargin = int(((expansionRatio - 1) * self.outRes) / 2 + 1)
         expandedRes = self.outRes + resMargin * 2
