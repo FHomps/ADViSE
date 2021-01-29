@@ -3,20 +3,19 @@ import torch
 import random
 
 class StatTracker():
-    def __init__(self, smoothing_factor = None):
+    def __init__(self, smoothing=True, smoothing_factor = 0.5):
         self.items = list()
-        if smoothing_factor != None:
+        self.smoothing = smoothing
+        if smoothing:
             self.alpha = smoothing_factor
             self.smooth = list()
-        else:
-            self.smooth = None
 
     def __len__(self):
         return len(self.items)
 
     def log(self, x):
         self.items.append(x)
-        if self.smooth != None:
+        if self.smoothing:
             if len(self.items) == 1:
                 self.smooth.append(x)
             else:

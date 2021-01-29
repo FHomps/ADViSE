@@ -190,7 +190,7 @@ class Pix2Pix(Model):
     
     def loadFromFile(self, filename_stub):
         self.generator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
-        self.discriminator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
+        self.discriminator.load_state_dict(torch.load(filename_stub + "_discriminator.ts"))
     
     def initWeights(self):
         self.generator.apply(weights_init_normal)
