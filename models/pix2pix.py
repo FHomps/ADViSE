@@ -153,9 +153,6 @@ class Pix2Pix(Model):
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
         
         self.initWeights()
-        
-    def reset_counters(self):
-        self.L1Losses = StatTracker(10)
     
     def train(self, inp, label):
         real_in = inp.type(self.Tensor)
@@ -186,9 +183,8 @@ class Pix2Pix(Model):
         loss_D.backward()
         
         self.optimizer_D.step()
-        
-        self.L1Losses.log(loss_pixel)
-        
+
+        return loss_pixel       
     
     def saveToFile(self, filename_stub):
         torch.save(self.generator.state_dict(), filename_stub + "_generator.ts")
@@ -197,12 +193,10 @@ class Pix2Pix(Model):
     def loadFromFile(self, filename_stub):
         self.generator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
         self.discriminator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
-        self.reset_counters()
     
     def initWeights(self):
         self.generator.apply(weights_init_normal)
         self.discriminator.apply(weights_init_normal)
-        self.reset_counters()
     
     def __call__(self, inp):
         return self.generator(inp.type(self.Tensor))
