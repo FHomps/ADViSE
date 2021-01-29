@@ -3,8 +3,6 @@ import torch
 import numpy as np
 
 from .model import Model
-from .utils import StatTracker
-
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
