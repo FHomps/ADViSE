@@ -137,10 +137,8 @@ class Discriminator(nn.Module):
 
 
 class Pix2Pix(Model):
-    def __init__(self, device, imgRes, learning_rate=0.0002, b1=0.5, b2=0.999):
+    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999):
         super(Pix2Pix, self).__init__()
-        in_channels = 1
-        out_channels = 1
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
         self.criterion_pixelwise = torch.nn.L1Loss().to(device)
