@@ -48,8 +48,3 @@ external-deps/python-language-server/.installation-dir/
 */__pycache__/
 
 # Project dependent
-data/datasets/input/*
-data/datasets/output/*
-data/heightmaps/*
-data/models/*
-data/satellite_pictures/*
