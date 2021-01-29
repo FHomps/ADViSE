@@ -2,8 +2,8 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-from .model import Model
-from ..utils import StatTracker
+from models.model import Model
+from utils import StatTracker
 
 
 def weights_init_normal(m):
@@ -151,7 +151,10 @@ class Pix2Pix(Model):
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, betas=(b1, b2))
         self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=learning_rate, betas=(b1, b2))
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
-    
+        
+        self.initWeights()
+        
+    def reset_counters(self):
         self.L1Losses = StatTracker(10)
     
     def train(self, inp, label):
@@ -193,10 +196,12 @@ class Pix2Pix(Model):
     def loadFromFile(self, filename_stub):
         self.generator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
         self.discriminator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
+        self.reset_counters()
     
     def initWeights(self):
         self.generator.apply(weights_init_normal)
         self.discriminator.apply(weights_init_normal)
+        self.reset_counters()
     
     def __call__(self, inp):
         return self.generator(inp.type(self.Tensor))
