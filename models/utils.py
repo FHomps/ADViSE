@@ -3,19 +3,39 @@ import torch
 import random
 
 class StatTracker():
-    def __init__(self, smoothing=True, smoothing_factor = 0.5):
+    def __init__(self, smoothing_factor=None):
         self.items = list()
-        self.smoothing = smoothing
-        if smoothing:
-            self.alpha = smoothing_factor
+        self.do_smoothing = (smoothing_factor != None)
+        if self.do_smoothing:
+            self.alpha = min(1, max(0, 1-smoothing_factor))
             self.smooth = list()
 
     def __len__(self):
         return len(self.items)
 
+    def get_dict(self):
+        d = {
+            "items": self.items.copy(),
+            "do_smoothing": self.do_smoothing
+        }
+        if self.do_smoothing:
+            d["alpha"] = self.alpha
+            d["smooth"] = self.smooth.copy()
+        return d
+
+    @staticmethod
+    def from_dict(d):
+        tracker = StatTracker()
+        tracker.items = d["items"].copy()
+        tracker.do_smoothing = d["do_smoothing"]
+        if tracker.do_smoothing:
+            tracker.alpha = d["alpha"]
+            tracker.smooth = d["smooth"].copy()
+        return tracker
+
     def log(self, x):
         self.items.append(x)
-        if self.smoothing:
+        if self.do_smoothing:
             if len(self.items) == 1:
                 self.smooth.append(x)
             else:
