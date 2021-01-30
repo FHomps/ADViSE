@@ -16,4 +16,4 @@ Pix2Pix GAN for image detection:
 * Authors: Phillip Isola, Jun-Yan Zhu, Tinghui Zhou, Alexei A. Efros: https://arxiv.org/abs/1611.07004
 * Implementation adapted from Erik Linder-Norén: https://github.com/eriklindernoren/PyTorch-GAN
 
-Martian DTM (Digital Terrain Models) from University of Arizona's HiRISE: https://www.uahirise.org/dtm/
+Martian DTMs (Digital Terrain Models) from University of Arizona's HiRISE: https://www.uahirise.org/dtm/
