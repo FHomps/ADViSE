@@ -258,9 +258,9 @@ def meanFilter(array, kernelSize):
 
 #%% FOLDER PREP
 
-hmdir = join("data/heightmaps")
+hmdir = join("data/heightmaps/")
 picdir = join("data/satellite_pictures")
-partdir = join("data/partitioned_datasets")
+partdir = join("data/partitioned_datasets/Firsoff_1000")
 
 #%% HEIGHTMAP / SLOPE - INITIAL PREP
 
@@ -280,11 +280,11 @@ del G
 
 #%% HEIGHTMAP / SLOPE - PARTITIONING
 
-ignore_Firsoff = loadIgnoreFromMask(join(partdir, "Firsoff_mask.png"), 250, 0.1)
+ignore_Firsoff = loadIgnoreFromMask(join(partdir, "mask.png"), 250, 0.1)
 
-printPartition(G_fixed, 250, join(partdir, "Firsoff_slope_bool_part.png"), ignore_Firsoff)
+printPartition(G_fixed, 250, join(partdir, "slope_bool.part.png"), ignore_Firsoff)
 G_T = toTensor(G_fixed, 250, ignore_Firsoff)
-torch.save(G_T, join(partdir, "Firsoff_slope_bool.ts"))
+torch.save(G_T, join(partdir, "slope_bool.ts"))
 #del G_fixed, G_T
 
 #%% CAMERA IMAGE - INITIAL PREP
@@ -295,7 +295,7 @@ del I
 
 #%% CAMERA IMAGE - PARTITIONING
 
-printPartition(I_fixed, 1000, join(partdir, "Firsoff_1_part.png"), ignore_Firsoff, resizeFactor=.25)
+printPartition(I_fixed, 1000, join(partdir, "sat_1.part.png"), ignore_Firsoff, resizeFactor=.25)
 I_T = toTensor(I_fixed, 1000, ignore_Firsoff)
-torch.save(I_T, join(partdir, "Firsoff_1.ts"))
+torch.save(I_T, join(partdir, "sat_1.ts"))
 #del I_fixed, I_T
