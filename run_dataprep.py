@@ -1,16 +1,30 @@
 # -- Dataset preparation utilities and commands --
 # This file is intended to be run from Spyder, which is more convenient to use
 # than Jupyter for those kinds of operations (easier visualization).
-# 
-#
+ 
+# Dataset preparation works by running the prepareDataset function twice:
+    
+# The first time, it will generate an empty mask image in png format.
+# This image should be edited with any image edition software by covering
+# unwanted spots (data from HiRise is not perfect) in pure red. Precision in
+# the coverage is not important, only the middle pixel of each spot matters.
+
+# The second time, the mask file will be loaded into a list of ignored spots.
+# This list is compared with the list of any previous masks loaded from a
+# pickled file; if the unpickled ignore list differs from the mask's (or does
+# not exist), it will be updated and partitioned tensors for the satellite
+# pictures and slope will be created.
+# Additional .part.png partition files are also created, which provide a
+# visual summary of the formatted datasets.
 
 from PIL import Image, ImageDraw, ImageFont
 Image.MAX_IMAGE_PIXELS = 2000000000
 import numpy as np
-from scipy import ndimage
 import struct
 import torch
-from os.path import join
+from os.path import join, exists
+import os
+import pickle
 
 def printDict(d):
     for key, value in d.items():
@@ -218,7 +232,8 @@ def printPartition(img, res, filename, ignore=[], resizeFactor=1, onlyGrid = Fal
         for x in xRange[:-1]:
             for y in yRange[:-1]:
                 if i_before in ignore:
-                    drawer.line(((x, y), (x+res, y+res)), fill=255, width=5)
+                    drawer.line(((x+res, y), (x, y+res)), fill=0, width=5)
+                    drawer.line(((x+res, y), (x, y+res)), fill=255, width=3)
                     drawOutlinedText(drawer, x+5, y, str(i_before), font)
                 else:
                     drawOutlinedText(drawer, x+5, y, str(i_before) + " (" + str(i_after) + ')', font)
@@ -253,49 +268,78 @@ def loadIgnoreFromMask(filename, res, resizeFactor):
             i += 1
     return ignoreList
 
-def meanFilter(array, kernelSize):
-    return ndimage.convolve(array, np.full((kernelSize, kernelSize), 1.0 / (kernelSize ** 2)))
+def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
+    print("Zone: " + zoneName)
+    
+    if gridSize % picResMultiplier != 0:
+        print("Warning: grid size is not a multiple of picResMultiplier")
+    gridSize_hm = round(gridSize / picResMultiplier)
+    
+    zPartdir = join(partdir, zoneName + '_' + str(gridSize))
+    os.makedirs(zPartdir, exist_ok=True)
+    
+    print("Loading heightmap...")
+    H, header = loadHeightmap(join(hmdir, zoneName + ".IMG"))
+    print("Computing slope...")
+    G_np = getSlope(H)
+    print("Computing image rotation correction factors...")
+    rot, box = getCropFactors(H, header, aggressiveCrop="top")
+    G_np = (G_np * 255).astype(np.uint8)
+    G = Image.fromarray(G_np)
+    del G_np
+    print("Correcting slope map rotation...")
+    G = G.rotate(rot).crop(np.round(box))
+    
+    maskFile = join(zPartdir, "mask.png")
+    
+    if not exists(maskFile):
+        print("Mask file doesn't exist, empty mask.")
+        printPartition(G, gridSize_hm, join(zPartdir, "emptymask.png"), onlyGrid=True)
+        return
+    
+    print("Loading mask file...")
+    ignore = loadIgnoreFromMask(maskFile, gridSize_hm, 1)
+    print("Mask loaded, ignores " + str(len(ignore)) + " spots.")
+    
+    ignoreFile = join(zPartdir, "ignore.pickle")
+    if not exists(ignoreFile):
+        print("Ignore file not found, creating.")
+        pickle.dump(ignore, open(ignoreFile, 'wb'))
+    else:
+        print("Comparing existing ignore file to mask...")
+        loaded_ignore = pickle.load(open(ignoreFile, 'rb'))
+        if loaded_ignore == ignore:
+            print("Unchanged ignore list, not recreating tensors.")
+            return
+        else:
+            print("Ignore list changed, updating ignore file.")
+            pickle.dump(ignore, open(ignoreFile, 'wb'))
 
-#%% FOLDER PREP
+    print("Creating slope tensor...")    
+    G_T = toTensor(G, gridSize_hm, ignore)
+    torch.save(G_T, join(zPartdir, "slope.ts"))
+    print("Printing slope partition...")
+    printPartition(G, gridSize_hm, join(zPartdir, "slope.part.png"), ignore)
+    del G, G_T    
+    
+    print("Loading satellite picture...")
+    I = Image.open(join(picdir, zoneName + "_1.bmp"))
+    print("Correcting image rotation...")
+    I = I.rotate(rot).crop(np.array(box) * picResMultiplier)
+    print("Creating satellite tensor...")
+    I_T = toTensor(I, gridSize, ignore)
+    torch.save(I_T, join(zPartdir, "sat_1.ts"))
+    print("Printing satellite partition...")
+    printPartition(I, gridSize, join(zPartdir, "sat_1.part.png"), ignore, 1 / picResMultiplier)
+    del I, I_T
+    print()
+    
+#%% Data prep
 
-hmdir = join("data/heightmaps")
-picdir = join("data/satellite_pictures")
-partdir = join("data/partitioned_datasets")
+hmdir = "data/heightmaps"
+picdir = "data/satellite_pictures"
+partdir = "data/partitioned_datasets"
 
-#%% HEIGHTMAP / SLOPE - INITIAL PREP
+zones = ("Firsoff", "Hypanis_Valles", "Mawrth_Vallis", "Phlegra_Montes", "Bob")
 
-H, header = loadHeightmap(join(hmdir, "Firsoff.IMG"))
-G_np = getSlope(H)
-
-G_np = meanFilter(G_np, 5)
-G_np = np.where(G_np > 25 / 45, True, False)
-G_np = ndimage.median_filter(G_np, size=5)
-
-rot, box = getCropFactors(H, header, aggressiveCrop="top")
-G = Image.fromarray(G_np)
-del G_np
-
-G_fixed = G.rotate(rot).crop(np.round(box))
-del G
-
-#%% HEIGHTMAP / SLOPE - PARTITIONING
-
-ignore_Firsoff = loadIgnoreFromMask(join(partdir, "Firsoff_mask.png"), 250, 0.1)
-
-printPartition(G_fixed, 250, join(partdir, "Firsoff_slope_bool_part.png"), ignore_Firsoff)
-G_T = toTensor(G_fixed, 250, ignore_Firsoff)
-torch.save(G_T, join(partdir, "Firsoff_slope_bool.ts"))
-#del G_fixed, G_T
-
-#%% CAMERA IMAGE - INITIAL PREP
-
-I = Image.open(join(picdir, "Firsoff_1.bmp"))
-I_fixed = I.rotate(rot).crop(np.round(np.array(box) * 4))
-del I
-
-#%% CAMERA IMAGE - PARTITIONING
-
-printPartition(I_fixed, 1000, join(partdir, "Firsoff_1_part.png"), ignore_Firsoff, resizeFactor=.25)
-I_T = toTensor(I_fixed, 1000, ignore_Firsoff)
-torch.save(I_T, join(partdir, "Firsoff_1.ts"))
-#del I_fixed, I_T
+prepareDataset("Firsoff")
