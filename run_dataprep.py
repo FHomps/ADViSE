@@ -215,14 +215,11 @@ def printPartition(img, res, filename, ignore=[], resizeFactor=1, onlyGrid = Fal
     xRange = range(0, imgc.size[0], res)
     yRange = range(0, imgc.size[1], res)
     drawer = ImageDraw.Draw(imgc)
+    
     for x in xRange:
         drawer.line(((x, 0), (x, yRange[-1])), fill=0, width=5)
     for y in yRange:
         drawer.line(((0, y), (xRange[-1], y)), fill=0, width=5)
-    for x in xRange:
-        drawer.line(((x, 0), (x, yRange[-1])), fill=255, width=3)
-    for y in yRange:
-        drawer.line(((0, y), (xRange[-1], y)), fill=255, width=3)
     
     if not onlyGrid:
         font = ImageFont.truetype("OpenSans.ttf", max(10, round(res / 70) * 10))
@@ -232,13 +229,18 @@ def printPartition(img, res, filename, ignore=[], resizeFactor=1, onlyGrid = Fal
         for x in xRange[:-1]:
             for y in yRange[:-1]:
                 if i_before in ignore:
-                    drawer.line(((x+res, y), (x, y+res)), fill=0, width=5)
-                    drawer.line(((x+res, y), (x, y+res)), fill=255, width=3)
+                    drawer.line(((x+res, y), (x, y+res)), fill=0, width=6)
+                    drawer.line(((x+res, y), (x, y+res)), fill=255, width=2)
                     drawOutlinedText(drawer, x+5, y, str(i_before), font)
                 else:
                     drawOutlinedText(drawer, x+5, y, str(i_before) + " (" + str(i_after) + ')', font)
                     i_after += 1
                 i_before += 1
+    
+    for x in xRange:
+        drawer.line(((x, 0), (x, yRange[-1])), fill=255, width=3)
+    for y in yRange:
+        drawer.line(((0, y), (xRange[-1], y)), fill=255, width=3)
     
     imgc.save(filename)
 
@@ -269,6 +271,7 @@ def loadIgnoreFromMask(filename, res, resizeFactor):
     return ignoreList
 
 def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
+    global G
     print("Zone: " + zoneName)
     
     if gridSize % picResMultiplier != 0:
@@ -293,7 +296,7 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     maskFile = join(zPartdir, "mask.png")
     
     if not exists(maskFile):
-        print("Mask file doesn't exist, empty mask.")
+        print("Mask file doesn't exist, creating empty mask.")
         printPartition(G, gridSize_hm, join(zPartdir, "emptymask.png"), onlyGrid=True)
         return
     
@@ -320,7 +323,7 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     torch.save(G_T, join(zPartdir, "slope.ts"))
     print("Printing slope partition...")
     printPartition(G, gridSize_hm, join(zPartdir, "slope.part.png"), ignore)
-    del G, G_T    
+    #del G, G_T    
     
     print("Loading satellite picture...")
     I = Image.open(join(picdir, zoneName + "_1.bmp"))
@@ -333,7 +336,7 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     printPartition(I, gridSize, join(zPartdir, "sat_1.part.png"), ignore, 1 / picResMultiplier)
     del I, I_T
     print()
-    
+
 #%% Data prep
 
 hmdir = "data/heightmaps"
