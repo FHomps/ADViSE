@@ -34,6 +34,8 @@ class StatTracker():
         return tracker
 
     def log(self, x):
+        if (torch.is_tensor(x)):
+            x = x.item()
         self.items.append(x)
         if self.do_smoothing:
             if len(self.items) == 1:
