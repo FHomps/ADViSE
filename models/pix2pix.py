@@ -222,7 +222,7 @@ class Pix2Pix(Model):
         torch.save(self.discriminator.state_dict(), filename_stub + "_discriminator.ts")
         
         tracker_dicts = {}
-        for key, tracker in trackers.items():
+        for key, tracker in self.trackers.items():
             tracker_dicts[key] = tracker.get_dict()
         pickle.dump(tracker_dicts, open(filename_stub + "_trackers.pickle", "wb"))
 
