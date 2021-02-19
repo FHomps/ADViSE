@@ -137,7 +137,7 @@ class Discriminator(nn.Module):
 
 
 class Pix2Pix(Model):
-    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, trackerSmoothing=None):
+    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, trackerSmoothing=None, extraLosses={}):
         super(Pix2Pix, self).__init__()
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
@@ -152,18 +152,22 @@ class Pix2Pix(Model):
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, betas=(b1, b2))
         self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=learning_rate, betas=(b1, b2))
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
-
+        
+        self.extraLosses = extraLosses
         self.trackerSmoothing = trackerSmoothing
         
         self.initWeights()
 
     def resetTracking(self):
-        self.GLoss_adversarial = StatTracker(self.trackerSmoothing)
-        self.GLoss_pixel = StatTracker(self.trackerSmoothing)
-        self.GLoss_combined = StatTracker(self.trackerSmoothing)
-        self.DLoss_real = StatTracker(self.trackerSmoothing)
-        self.DLoss_fake = StatTracker(self.trackerSmoothing)
-        self.DLoss_combined = StatTracker(self.trackerSmoothing)
+        self.trackers = {}
+        self.trackers["GLoss_adversarial"] = StatTracker(self.trackerSmoothing)
+        self.trackers["GLoss_pixel"] = StatTracker(self.trackerSmoothing)
+        self.trackers["GLoss_combined"] = StatTracker(self.trackerSmoothing)
+        self.trackers["DLoss_real"] = StatTracker(self.trackerSmoothing)
+        self.trackers["DLoss_fake"] = StatTracker(self.trackerSmoothing)
+        self.trackers["DLoss_combined"] = StatTracker(self.trackerSmoothing)
+        for k, l in self.extraLosses.items():
+            self.trackers[k] = StatTracker(self.trackerSmoothing)
     
     def train(self, inp, label):
         real_in = inp.type(self.Tensor)
@@ -203,25 +207,23 @@ class Pix2Pix(Model):
         
         self.optimizer_D.step()
 
-        self.GLoss_adversarial.log(loss_adversarial)
-        self.GLoss_pixel.log(loss_pixel)
-        self.GLoss_combined.log(loss_G)
-        self.DLoss_real.log(loss_real)
-        self.DLoss_fake.log(loss_fake)
-        self.DLoss_combined.log(loss_D)
+        self.trackers["GLoss_adversarial"].log(loss_adversarial)
+        self.trackers["GLoss_pixel"].log(loss_pixel)
+        self.trackers["GLoss_combined"].log(loss_G)
+        self.trackers["DLoss_real"].log(loss_real)
+        self.trackers["DLoss_fake"].log(loss_fake)
+        self.trackers["DLoss_combined"].log(loss_D)
+        
+        for k, l in self.extraLosses.items():
+            self.trackers[k].log(l(fake_out, real_out))
     
     def saveToFile(self, filename_stub):
         torch.save(self.generator.state_dict(), filename_stub + "_generator.ts")
         torch.save(self.discriminator.state_dict(), filename_stub + "_discriminator.ts")
-
-        tracker_dicts = {
-            "GLoss_adversarial": self.GLoss_adversarial.get_dict(),
-            "GLoss_pixel": self.GLoss_pixel.get_dict(),
-            "GLoss_combined": self.GLoss_combined.get_dict(),
-            "DLoss_real": self.DLoss_real.get_dict(),
-            "DLoss_fake": self.DLoss_fake.get_dict(),
-            "DLoss_combined": self.DLoss_combined.get_dict()
-        }
+        
+        tracker_dicts = {}
+        for key, tracker in trackers.items():
+            tracker_dicts[key] = tracker.get_dict()
         pickle.dump(tracker_dicts, open(filename_stub + "_trackers.pickle", "wb"))
 
     
@@ -229,27 +231,11 @@ class Pix2Pix(Model):
         self.generator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
         self.discriminator.load_state_dict(torch.load(filename_stub + "_discriminator.ts"))
         
-        try:
-            tracker_dicts = pickle.load(open(filename_stub + "_trackers.pickle", "rb"))
-
-            def tryLoadingTracker(dict_key):
-                try:
-                    return StatTracker.from_dict(tracker_dicts[dict_key])
-                except KeyError:
-                    print("Tracker " + dict_key + " not found, creating from scratch")
-                    return StatTracker(self.trackerSmoothing)
-
-            self.GLoss_adversarial = tryLoadingTracker("GLoss_adversarial")
-            self.GLoss_pixel =       tryLoadingTracker("GLoss_pixel")
-            self.GLoss_combined =    tryLoadingTracker("GLoss_combined")
-            self.DLoss_real =        tryLoadingTracker("DLoss_real")
-            self.DLoss_fake =        tryLoadingTracker("DLoss_fake")
-            self.DLoss_combined =    tryLoadingTracker("DLoss_combined")
-
-        except FileNotFoundError:
-            print("No trackers file found, initializing trackers from scratch")
-            self.resetTracking()
-    
+        self.resetTracking()
+        tracker_dicts = pickle.load(open(filename_stub + "_trackers.pickle", "rb"))
+        for k, d in tracker_dicts.items():
+            self.trackers[k] = StatTracker.from_dict(d)
+        
     def initWeights(self):
         self.generator.apply(weights_init_normal)
         self.discriminator.apply(weights_init_normal)
