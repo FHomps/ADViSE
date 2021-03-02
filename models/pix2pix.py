@@ -169,7 +169,7 @@ class Pix2Pix(Model):
         for k, l in self.extraLosses.items():
             self.trackers[k] = StatTracker(self.trackerSmoothing)
     
-    def train(self, inp, label):
+    def train(self, inp, label, computeExtraLosses=True):
         real_in = inp.type(self.Tensor)
         real_out = label.type(self.Tensor)
         
@@ -214,8 +214,9 @@ class Pix2Pix(Model):
         self.trackers["DLoss_fake"].log(loss_fake)
         self.trackers["DLoss_combined"].log(loss_D)
         
-        for k, l in self.extraLosses.items():
-            self.trackers[k].log(l(fake_out, real_out))
+        if computeExtraLosses:
+            for k, l in self.extraLosses.items():
+                self.trackers[k].log(l(fake_out, real_out))
     
     def saveToFile(self, filename_stub):
         torch.save(self.generator.state_dict(), filename_stub + "_generator.ts")
