@@ -137,7 +137,7 @@ class Discriminator(nn.Module):
 
 
 class Pix2Pix(Model):
-    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, trackerSmoothing=None, extraLosses={}):
+    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, extraLosses={}):
         super(Pix2Pix, self).__init__()
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
@@ -154,22 +154,12 @@ class Pix2Pix(Model):
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
         
         self.extraLosses = extraLosses
-        self.trackerSmoothing = trackerSmoothing
-        
         self.initWeights()
-
-    def resetTracking(self):
-        self.trackers = {}
-        self.trackers["GLoss_adversarial"] = StatTracker(self.trackerSmoothing)
-        self.trackers["GLoss_pixel"] = StatTracker(self.trackerSmoothing)
-        self.trackers["GLoss_combined"] = StatTracker(self.trackerSmoothing)
-        self.trackers["DLoss_real"] = StatTracker(self.trackerSmoothing)
-        self.trackers["DLoss_fake"] = StatTracker(self.trackerSmoothing)
-        self.trackers["DLoss_combined"] = StatTracker(self.trackerSmoothing)
-        for k, l in self.extraLosses.items():
-            self.trackers[k] = StatTracker(self.trackerSmoothing)
     
     def train(self, inp, label, computeExtraLosses=True):
+        self.generator.train()
+        self.discriminator.train()
+        
         real_in = inp.type(self.Tensor)
         real_out = label.type(self.Tensor)
         
@@ -207,40 +197,72 @@ class Pix2Pix(Model):
         
         self.optimizer_D.step()
 
-        self.trackers["GLoss_adversarial"].log(loss_adversarial)
-        self.trackers["GLoss_pixel"].log(loss_pixel)
-        self.trackers["GLoss_combined"].log(loss_G)
-        self.trackers["DLoss_real"].log(loss_real)
-        self.trackers["DLoss_fake"].log(loss_fake)
-        self.trackers["DLoss_combined"].log(loss_D)
+        losses = {}
         
+        losses["GLoss_adversarial"] = loss_adversarial.item()
+        losses["GLoss_pixel"] = loss_pixel.item()
+        losses["GLoss_combined"] = loss_G.item()
+        losses["DLoss_real"] = loss_real.item()
+        losses["DLoss_fake"] = loss_fake.item()
+        losses["DLoss_combined"] = loss_D.item()
+
         if computeExtraLosses:
             for k, l in self.extraLosses.items():
-                self.trackers[k].log(l(fake_out, real_out))
+                losses[k] = l(fake_out, real_out).item()
+        
+        return losses
+                
+    def evaluate(self, inp, label, computeExtraLosses=True):
+        self.generator.eval()
+        self.discriminator.eval()
+        
+        with torch.no_grad():
+            real_in = inp.type(self.Tensor)
+            real_out = label.type(self.Tensor)
+
+            valid = self.Tensor(np.ones((real_in.size(0), *self.patch)))
+            fake = self.Tensor(np.zeros((real_in.size(0), *self.patch)))
+
+            fake_out = self.generator(real_in)
+            fake_pred = self.discriminator(fake_out, real_in)
+            loss_adversarial = self.criterion_GAN(fake_pred, valid)
+            loss_pixel = self.criterion_pixelwise(fake_out, real_out)
+            loss_G = loss_adversarial + self.lambda_pixel * loss_pixel
+
+            real_pred = self.discriminator(real_out, real_in)
+            loss_real = self.criterion_GAN(real_pred, valid)
+            loss_fake = self.criterion_GAN(fake_pred.detach(), fake)
+
+            loss_D = 0.5 * (loss_real + loss_fake)
+            
+            losses = {}
+            
+            losses["GLoss_adversarial"] = loss_adversarial.item()
+            losses["GLoss_pixel"] = loss_pixel.item()
+            losses["GLoss_combined"] = loss_G.item()
+            losses["DLoss_real"] = loss_real.item()
+            losses["DLoss_fake"] = loss_fake.item()
+            losses["DLoss_combined"] = loss_D.item()
+
+            if computeExtraLosses:
+                for k, l in self.extraLosses.items():
+                    losses[k] = l(fake_out, real_out).item()
+            
+            return fake_out, losses
     
     def saveToFile(self, filename_stub):
         torch.save(self.generator.state_dict(), filename_stub + "_generator.ts")
         torch.save(self.discriminator.state_dict(), filename_stub + "_discriminator.ts")
-        
-        tracker_dicts = {}
-        for key, tracker in self.trackers.items():
-            tracker_dicts[key] = tracker.get_dict()
-        pickle.dump(tracker_dicts, open(filename_stub + "_trackers.pickle", "wb"))
-
     
     def loadFromFile(self, filename_stub):
         self.generator.load_state_dict(torch.load(filename_stub + "_generator.ts"))
         self.discriminator.load_state_dict(torch.load(filename_stub + "_discriminator.ts"))
         
-        self.resetTracking()
-        tracker_dicts = pickle.load(open(filename_stub + "_trackers.pickle", "rb"))
-        for k, d in tracker_dicts.items():
-            self.trackers[k] = StatTracker.from_dict(d)
-        
     def initWeights(self):
         self.generator.apply(weights_init_normal)
         self.discriminator.apply(weights_init_normal)
-        self.resetTracking()
-    
+        
     def __call__(self, inp):
-        return self.generator(inp.type(self.Tensor))
+        self.generator.eval()
+        with torch.no_grad():
+            return self.generator(inp.type(self.Tensor))

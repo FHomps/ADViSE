@@ -9,6 +9,10 @@ class Model(ABC):
         pass
     
     @abstractmethod
+    def evaluate(self, inp, label):
+        pass
+    
+    @abstractmethod
     def saveToFile(self, filename):
         pass
     

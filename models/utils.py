@@ -43,7 +43,9 @@ class StatTracker():
             else:
                 self.smooth.append(self.alpha * x + (1 - self.alpha) * self.smooth[-1])
 
-def saveSample(model, dataset, filename, n_samples, n_cols = 6, normalize = False, batch_index = True):
+def saveSample(model, dataset, filename, n_samples, n_cols = 6, normalize = False, batch_index = True, seed=None):
+    random.seed(seed)
+    torch.manual_seed(seed)
     selection = random.sample(range(len(dataset)), n_samples)
     if batch_index:
         inp, gt = dataset[selection]
@@ -57,4 +59,7 @@ def saveSample(model, dataset, filename, n_samples, n_cols = 6, normalize = Fals
             samples.append(torch.cat((inp, out, gt), -2))
 
     torchvision.utils.save_image(samples, filename, nrow=n_cols, normalize=normalize)
+    random.seed(None)
+    torch.manual_seed(random.getrandbits(64))
+    
     
