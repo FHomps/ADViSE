@@ -337,6 +337,8 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     del I, I_T
     print()
 
+
+
 #%% Data prep
 
 hmdir = "data/heightmaps"
@@ -345,4 +347,15 @@ partdir = "data/partitioned_datasets"
 
 zones = ("Firsoff", "Hypanis_Valles", "Mawrth_Vallis", "Phlegra_Montes", "Bob")
 
-prepareDataset("Firsoff")
+#prepareDataset("Firsoff", gridSize=1024)
+
+#%% Postprocessing
+from postprocessing import getViabilityMap, saveProcessedSample
+
+dataset = "Firsoff_1024"
+
+gt_T = torch.load(join(partdir, dataset, "slope.ts"))
+saveProcessedSample(gt_T, join(partdir, dataset, "slope_processed.sample.png"))
+
+pgt_T = getViabilityMap(gt_T)
+torch.save(pgt_T, join(partdir, dataset, "slope_processed.ts"))
