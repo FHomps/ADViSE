@@ -1,12 +1,13 @@
 import numpy as np
 import torch
-from torch.nn.functional import conv2d, unfold, pad
+from torch.nn.functional import conv2d, unfold, pad, mse_loss
 import torchvision
 from torchvision.transforms.functional import resize
 import random
 
 def gaussian_blur(img, ksize=3, strength=1):
-    weights = torch.empty((1, 1, ksize, ksize), dtype=torch.float, requires_grad=False)
+    weights = img.new_empty((1, 1, ksize, ksize), dtype=torch.float, requires_grad=False)
+    
     center = (ksize-1) / 2
     
     coeffs = {}
@@ -94,4 +95,4 @@ class ViabilityLoss:
         self.thresholds = thresholds
     
     def __call__(self, out, gt):
-        return np.mean(np.bitwise_xor(getViabilityMap(out.detach(), self.thresholds), gt))
+        return mse_loss(getViabilityMap(out.detach(), self.thresholds), gt)
