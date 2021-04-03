@@ -18,7 +18,7 @@
 # visual summary of the formatted datasets.
 
 from PIL import Image, ImageDraw, ImageFont
-Image.MAX_IMAGE_PIXELS = 2000000000
+Image.MAX_IMAGE_PIXELS = 5000000000
 import numpy as np
 import struct
 import torch
@@ -323,19 +323,19 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     torch.save(G_T, join(zPartdir, "slope.ts"))
     print("Printing slope partition...")
     printPartition(G, gridSize_hm, join(zPartdir, "slope.part.png"), ignore)
-    #del G, G_T    
+    del G, G_T    
     
     print("Loading satellite picture...")
     I = Image.open(join(picdir, zoneName + "_1.bmp"))
     print("Correcting image rotation...")
-    I = I.rotate(rot).crop(np.array(box) * picResMultiplier)
+    I = I.rotate(rot)
+    I = I.crop(np.array(box) * picResMultiplier)
     print("Creating satellite tensor...")
     I_T = toTensor(I, gridSize, ignore)
     torch.save(I_T, join(zPartdir, "sat_1.ts"))
     print("Printing satellite partition...")
     printPartition(I, gridSize, join(zPartdir, "sat_1.part.png"), ignore, 1 / picResMultiplier)
     del I, I_T
-    print()
 
 
 
@@ -345,17 +345,29 @@ hmdir = "data/heightmaps"
 picdir = "data/satellite_pictures"
 partdir = "data/partitioned_datasets"
 
-zones = ("Firsoff", "Hypanis_Valles", "Mawrth_Vallis", "Phlegra_Montes", "Bob")
+zones = (
+    #"Firsoff", 
+    #"Crommelin",
+    "Hellespontus", 
+    #"Sabrina_Vallis",
+)
 
-#prepareDataset("Firsoff", gridSize=1024)
+
+#%%
+for z in zones:
+    prepareDataset(z, gridSize=1024)
+    print()
 
 #%% Postprocessing
 from postprocessing import getViabilityMap, saveProcessedSample
 
-dataset = "Firsoff_1024"
-
-gt_T = torch.load(join(partdir, dataset, "slope.ts"))
-saveProcessedSample(gt_T, join(partdir, dataset, "slope_processed.sample.png"))
-
-pgt_T = getViabilityMap(gt_T)
-torch.save(pgt_T, join(partdir, dataset, "slope_processed.ts"))
+for z in zones:
+    dataset = z + "_1024"
+    print("Loading slope tensor...")
+    gt_T = torch.load(join(partdir, dataset, "slope.ts"))
+    saveProcessedSample(gt_T, join(partdir, dataset, "slope_processed.sample.png"))
+    
+    print("Computing full VMap...")
+    pgt_T = getViabilityMap(gt_T)
+    print("Saving processed tensor...")
+    torch.save(pgt_T, join(partdir, dataset, "slope_processed.ts"))
