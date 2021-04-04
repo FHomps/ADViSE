@@ -137,11 +137,14 @@ class Discriminator(nn.Module):
 
 
 class Pix2Pix(Model):
-    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, extraLosses={}):
+    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, extraLosses={}, useMSE=False):
         super(Pix2Pix, self).__init__()
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
-        self.criterion_pixelwise = torch.nn.L1Loss().to(device)
+        if useMSE:
+            self.criterion_pixelwise = torch.nn.MSELoss().to(device)
+        else:
+            self.criterion_pixelwise = torch.nn.L1Loss().to(device)
         self.lambda_pixel = lambda_px
         # The discriminator will estimate the credibility of each patch of pixels
         self.patch = (1, imgRes // 2 ** 4, imgRes // 2 ** 4)
