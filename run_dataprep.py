@@ -18,7 +18,7 @@
 # visual summary of the formatted datasets.
 
 from PIL import Image, ImageDraw, ImageFont
-Image.MAX_IMAGE_PIXELS = 2000000000
+Image.MAX_IMAGE_PIXELS = 5000000000
 import numpy as np
 import struct
 import torch
@@ -270,7 +270,7 @@ def loadIgnoreFromMask(filename, res, resizeFactor):
             i += 1
     return ignoreList
 
-def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
+def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4, variant=1, useIgnoreFile=True):
     global G
     print("Zone: " + zoneName)
     
@@ -304,38 +304,40 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4):
     ignore = loadIgnoreFromMask(maskFile, gridSize_hm, 1)
     print("Mask loaded, ignores " + str(len(ignore)) + " spots.")
     
-    ignoreFile = join(zPartdir, "ignore.pickle")
-    if not exists(ignoreFile):
-        print("Ignore file not found, creating.")
-        pickle.dump(ignore, open(ignoreFile, 'wb'))
-    else:
-        print("Comparing existing ignore file to mask...")
-        loaded_ignore = pickle.load(open(ignoreFile, 'rb'))
-        if loaded_ignore == ignore:
-            print("Unchanged ignore list, not recreating tensors.")
-            return
-        else:
-            print("Ignore list changed, updating ignore file.")
+    if useIgnoreFile:
+        ignoreFile = join(zPartdir, "ignore.pickle")
+        if not exists(ignoreFile):
+            print("Ignore file not found, creating.")
             pickle.dump(ignore, open(ignoreFile, 'wb'))
+        else:
+            print("Comparing existing ignore file to mask...")
+            loaded_ignore = pickle.load(open(ignoreFile, 'rb'))
+            if loaded_ignore == ignore:
+                cont_ans = input("Unchanged ignore list, still create tensors?\n")
+                if (cont_ans.lower() not in ("y", "yes")):
+                    return
+            else:
+                print("Ignore list changed, updating ignore file.")
+                pickle.dump(ignore, open(ignoreFile, 'wb'))
 
     print("Creating slope tensor...")    
     G_T = toTensor(G, gridSize_hm, ignore)
     torch.save(G_T, join(zPartdir, "slope.ts"))
     print("Printing slope partition...")
     printPartition(G, gridSize_hm, join(zPartdir, "slope.part.png"), ignore)
-    #del G, G_T    
+    del G, G_T    
     
     print("Loading satellite picture...")
-    I = Image.open(join(picdir, zoneName + "_1.bmp"))
+    I = Image.open(join(picdir, zoneName + '_' + str(variant) + ".bmp"))
     print("Correcting image rotation...")
-    I = I.rotate(rot).crop(np.array(box) * picResMultiplier)
+    I = I.rotate(rot)
+    I = I.crop(np.array(box) * picResMultiplier)
     print("Creating satellite tensor...")
     I_T = toTensor(I, gridSize, ignore)
-    torch.save(I_T, join(zPartdir, "sat_1.ts"))
+    torch.save(I_T, join(zPartdir, "sat_" + str(variant) + ".ts"))
     print("Printing satellite partition...")
-    printPartition(I, gridSize, join(zPartdir, "sat_1.part.png"), ignore, 1 / picResMultiplier)
+    printPartition(I, gridSize, join(zPartdir, "sat_" + str(variant) + ".part.png"), ignore, 1 / picResMultiplier)
     del I, I_T
-    print()
 
 
 
@@ -345,17 +347,66 @@ hmdir = "data/heightmaps"
 picdir = "data/satellite_pictures"
 partdir = "data/partitioned_datasets"
 
-zones = ("Firsoff", "Hypanis_Valles", "Mawrth_Vallis", "Phlegra_Montes", "Bob")
+zones = (
+    "Crommelin",
+    "Firsoff", 
+    "Hellespontus", 
+    "Mawrth_Vallis",
+    "Utopia_Planitia",
+)
 
-#prepareDataset("Firsoff", gridSize=1024)
+gridSize = 1024
+
+#%%
+for z in zones:
+    prepareDataset(z, gridSize=gridSize, variant=2)
+    print()
 
 #%% Postprocessing
 from postprocessing import getViabilityMap, saveProcessedSample
 
-dataset = "Firsoff_1024"
+for z in zones:
+    dsdir = z + '_' + str(gridSize)
+    print("Loading slope tensor...")
+    gt_T = torch.load(join(partdir, dsdir, "slope.ts"))
+    saveProcessedSample(gt_T, join(partdir, dsdir, "slope_processed.sample.png"))
+    
+    print("Computing full VMap...")
+    pgt_T = getViabilityMap(gt_T)
+    print("Saving processed tensor...")
+    torch.save(pgt_T, join(partdir, dsdir, "slope_processed.ts"))
+    
+#%% Unification
 
-gt_T = torch.load(join(partdir, dataset, "slope.ts"))
-saveProcessedSample(gt_T, join(partdir, dataset, "slope_processed.sample.png"))
+unified_ds_name = "Unified"
+unified_ds_dir = join(partdir, unified_ds_name + '_' + str(gridSize))
+os.makedirs(unified_ds_dir, exist_ok=True)
 
-pgt_T = getViabilityMap(gt_T)
-torch.save(pgt_T, join(partdir, dataset, "slope_processed.ts"))
+#%%
+
+U_T = torch.ByteTensor([])
+for z in zones:
+    dsdir = join(partdir, z + '_' + str(gridSize))
+    U_T = torch.cat((U_T, torch.load(join(dsdir, "sat_1.ts"))), 0)
+np.save(join(unified_ds_dir, "sat_1.npy"), U_T.numpy())
+
+#%%
+U_T = torch.ByteTensor([])
+for z in zones:
+    dsdir = join(partdir, z + '_' + str(gridSize))
+    U_T = torch.cat((U_T, torch.load(join(dsdir, "sat_2.ts"))), 0)
+np.save(join(unified_ds_dir, "sat_2.npy"), U_T.numpy())
+
+#%%
+U_T = torch.ByteTensor([])
+for z in zones:
+    dsdir = join(partdir, z + '_' + str(gridSize))
+    U_T = torch.cat((U_T, torch.load(join(dsdir, "slope.ts"))), 0)
+np.save(join(unified_ds_dir, "slope.npy"), U_T.numpy())
+
+#%%
+U_T = torch.ByteTensor([])
+for z in zones:
+    dsdir = join(partdir, z + '_' + str(gridSize))
+    U_T = torch.cat((U_T, torch.load(join(dsdir, "slope_processed.ts"))), 0)
+np.save(join(unified_ds_dir, "slope_processed.npy"), U_T.numpy())

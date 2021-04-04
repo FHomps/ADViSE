@@ -85,9 +85,11 @@ def saveProcessedSample(tensor, filename, thresholds = VMAP_DEFAULT_THRESHOLDS, 
     selection = random.sample(range(tensor.size(0)), n_samples)
     
     img_in = tensor[selection]
+    print("Computing VMap sample...")
     img_out = getViabilityMap(img_in, thresholds)
     samples = torch.cat((img_in, img_out), -2)
-
+    
+    print("Saving VMap sample...")
     torchvision.utils.save_image(samples.float() / 255, filename, nrow=n_cols, normalize=normalize)
 
 class ViabilityLoss:
