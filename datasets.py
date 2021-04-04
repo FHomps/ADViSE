@@ -12,11 +12,15 @@ from torch import tensor
 
 class LandingZoneDataset(Dataset):
     def __init__(self, img_tensor, gt_tensor, selection, outRes = 128,
-                 minSizeRatio = 1/3, maxSizeRatio = 1., rotate = True, compensateCorners = True):
+                 minSizeRatio = 1/3, maxSizeRatio = 1., rotate = True, compensateCorners = True, twin_img_tensor = None):
         
         self.selection = tensor(selection, dtype=torch.int64)
         self.images = torch.index_select(img_tensor, 0, self.selection)
+        if twin_img_tensor != None:
+            self.images = torch.cat((self.images, torch.index_select(twin_img_tensor, 0, self.selection)), 0)
         self.groundTruth = torch.index_select(gt_tensor, 0, self.selection)
+        if twin_img_tensor != None:
+            self.groundTruth = self.groundTruth.repeat((2, 1, 1, 1))
         
         self.img_size = self.images.size()[-1]
         self.gt_size = self.groundTruth.size()[-1]
