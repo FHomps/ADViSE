@@ -7,10 +7,10 @@ from .model import Model
 from .utils import StatTracker
 
 def weights_init_normal(m):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
+    class_name = m.__class__.__name__
+    if class_name.find("Conv") != -1:
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find("BatchNorm2d") != -1:
+    elif class_name.find("BatchNorm2d") != -1:
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
 
@@ -105,10 +105,10 @@ class GeneratorUNet(nn.Module):
 
 
 class Pix1Pix(Model):
-    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extraLosses={}, useMSE=False):
+    def __init__(self, device, img_res, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extra_losses={}, use_MSE=False):
         super(Pix1Pix, self).__init__()
         
-        if useMSE:
+        if use_MSE:
             self.criterion_pixelwise = torch.nn.MSELoss().to(device)
         else:
             self.criterion_pixelwise = torch.nn.L1Loss().to(device)
@@ -118,10 +118,10 @@ class Pix1Pix(Model):
         self.optimizer_G = torch.optim.Adam(self.generator.parameters(), lr=learning_rate, betas=(b1, b2))
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
         
-        self.extraLosses = extraLosses
+        self.extra_losses = extra_losses
         self.initWeights()
     
-    def train(self, inp, label, computeExtraLosses=True):
+    def train(self, inp, label, compute_extra_losses=True):
         self.generator.train()
         
         real_in = inp.type(self.Tensor)
@@ -138,13 +138,13 @@ class Pix1Pix(Model):
         
         losses["GLoss_pixel"] = loss_G.item()
         
-        if computeExtraLosses:
-            for k, l in self.extraLosses.items():
+        if compute_extra_losses:
+            for k, l in self.extra_losses.items():
                 losses[k] = l(fake_out, real_out).item()
         
         return losses
                 
-    def evaluate(self, inp, label, computeExtraLosses=True):
+    def evaluate(self, inp, label, compute_extra_losses=True):
         self.generator.eval()
         
         with torch.no_grad():
@@ -158,8 +158,8 @@ class Pix1Pix(Model):
             
             losses["GLoss_pixel"] = loss_G.item()
             
-            if computeExtraLosses:
-                for k, l in self.extraLosses.items():
+            if compute_extra_losses:
+                for k, l in self.extra_losses.items():
                     losses[k] = l(fake_out, real_out).item()
             
             return fake_out, losses
