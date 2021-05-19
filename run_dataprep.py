@@ -104,7 +104,8 @@ def absmod(x, m): # Modulus going into the negatives to minimize absolute value
     return x
 
 # Returns the rotation and cropping parameters to be applied to the image to straighten it
-def getCropFactors(heightmap, header, aggressiveCrop = False):
+# Extra cropping is optionally applied to the top left of the image / dataset
+def getCropFactors(heightmap, header, aggressiveCrop = False, extraCrop = (0, 0)):
     lines = len(heightmap)
     cols = len(heightmap[0])
     missing_constant = struct.unpack('!f', bytes.fromhex(header["MISSING_CONSTANT"][3:-1]))
@@ -156,24 +157,28 @@ def getCropFactors(heightmap, header, aggressiveCrop = False):
     else:
         tl, tr, bl, br = rotate(left, rot, c), rotate(top, rot, c), rotate(bot, rot, c), rotate(right, rot, c)
     
+    
+    if extraCrop == None:
+        extraCrop = (0, 0)
+    
     if aggressiveCrop == True:
         cropBox = (
-            max(tl[0], bl[0]),
-            lines - min(tl[1], tr[1]),
+            max(tl[0], bl[0]) + extraCrop[0],
+            lines - min(tl[1], tr[1]) + extraCrop[1],
             min(tr[0], br[0]),
             lines - max(bl[1], br[1])
         )
     elif aggressiveCrop == "top":
         cropBox = (
-            max(tl[0], bl[0]),
-            lines - min(tl[1], tr[1]),
+            max(tl[0], bl[0]) + extraCrop[0],
+            lines - min(tl[1], tr[1]) + extraCrop[1],
             max(tr[0], br[0]),
             lines - min(bl[1], br[1])
         )
     else:
         cropBox = (
-            min(tl[0], bl[0]),
-            lines - max(tl[1], tr[1]),
+            min(tl[0], bl[0]) + extraCrop[0],
+            lines - max(tl[1], tr[1]) + extraCrop[1],
             max(tr[0], br[0]),
             lines - min(bl[1], br[1])
         )
@@ -270,7 +275,7 @@ def loadIgnoreFromMask(filename, res, resizeFactor):
             i += 1
     return ignoreList
 
-def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4, variant=1, useIgnoreFile=True):
+def prepareDataset(zoneName, gridSize=1024, picResMultiplier=4, variant=1, useIgnoreFile=True, extraCrop=None):
     global G
     print("Zone: " + zoneName)
     
@@ -286,7 +291,7 @@ def prepareDataset(zoneName, gridSize=1000, picResMultiplier=4, variant=1, useIg
     print("Computing slope...")
     G_np = getSlope(H)
     print("Computing image rotation correction factors...")
-    rot, box = getCropFactors(H, header, aggressiveCrop="top")
+    rot, box = getCropFactors(H, header, aggressiveCrop="top", extraCrop=extraCrop)
     G_np = (G_np * 255).astype(np.uint8)
     G = Image.fromarray(G_np)
     del G_np
@@ -355,11 +360,19 @@ zones = (
     "Utopia_Planitia",
 )
 
-gridSize = 1024
+extraCrops = (
+    (100, 0),
+    None,
+    None,
+    None,
+    None
+)
+
+gridSize = 2048
 
 #%%
-for z in zones:
-    prepareDataset(z, gridSize=gridSize, variant=2)
+for z, xcrop in zip(zones, extraCrops):
+    prepareDataset(z, gridSize=gridSize, variant=2, extraCrop = xcrop)
     print()
 
 #%% Postprocessing
