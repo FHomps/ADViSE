@@ -11,22 +11,22 @@ import torch
 from torch import tensor
 
 class LandingZoneDataset(Dataset):
-    def __init__(self, img_tensor, gt_tensor, selection, outRes = 128,
-                 minZoom = 0.125, maxZoom = 8, rotate = True, twin_img_tensor = None):
+    def __init__(self, img_tensor, gt_tensor, selection, out_res = 128,
+                 min_zoom = 0.125, max_zoom = 8, rotate = True, twin_img_tensor = None):
         
         self.selection = tensor(selection, dtype=torch.int64)
         self.images = torch.index_select(img_tensor, 0, self.selection)
-        self.groundTruth = torch.index_select(gt_tensor, 0, self.selection)
+        self.ground_truth = torch.index_select(gt_tensor, 0, self.selection)
         if twin_img_tensor != None:
             self.images = torch.cat((self.images, torch.index_select(twin_img_tensor, 0, self.selection)), 0)
-            self.groundTruth = self.groundTruth.repeat((2, 1, 1, 1))
+            self.ground_truth = self.ground_truth.repeat((2, 1, 1, 1))
         
         self.img_size = self.images.size()[-1]
-        self.gt_size = self.groundTruth.size()[-1]
+        self.gt_size = self.ground_truth.size()[-1]
 
-        self.outRes = outRes
-        self.minZoom = minZoom
-        self.maxZoom = maxZoom
+        self.out_res = out_res
+        self.min_zoom = min_zoom
+        self.max_zoom = max_zoom
         if rotate:
             self.transform = self.transform_rotate
         else:
@@ -42,7 +42,7 @@ class LandingZoneDataset(Dataset):
 
         img_gt_ratio = round(img_res / gt_res)
         
-        z = np.exp(random.uniform(np.log(self.minZoom), np.log(self.maxZoom)))
+        z = np.exp(random.uniform(np.log(self.min_zoom), np.log(self.max_zoom)))
 
         # Compute extended crop boundaries (with margin for rotate)
         
@@ -52,19 +52,19 @@ class LandingZoneDataset(Dataset):
             b_t = b_l = round((gt_res - b_h) / 2)
         else:
             # RandomResizedCrop returns a crop within the bounds of the image
-            RRCScale = 1 / (z * z)
-            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRCScale, RRCScale), (1., 1.))
+            RRC_scale = 1 / (z * z)
+            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRC_scale, RRC_scale), (1., 1.))
             
         # The crop boundaries are extended by an optimal margin to include more data and minimize black corners after rotation
         angle = random.random() * 360
         alpha = (45 - abs((angle % 90) - 45)) * np.pi / 180
         expansionRatio = np.cos(alpha) + np.sin(alpha)
-        cropMargin = int((expansionRatio - 1) * b_w / 2 + 1)
+        crop_margin = int((expansionRatio - 1) * b_w / 2 + 1)
 
-        eb_t = b_t - cropMargin
-        eb_l = b_l - cropMargin
-        eb_b = eb_t + b_h + 2 * cropMargin
-        eb_r = eb_l + b_w + 2 * cropMargin
+        eb_t = b_t - crop_margin
+        eb_l = b_l - crop_margin
+        eb_b = eb_t + b_h + 2 * crop_margin
+        eb_r = eb_l + b_w + 2 * crop_margin
         
         # Get restricted bounds: intersection of extended bounds and image bounds
         rb_t = max(eb_t, 0)
@@ -76,8 +76,8 @@ class LandingZoneDataset(Dataset):
         img = TF.crop(image, *map(lambda x : round(x * img_gt_ratio), (rb_t, rb_l, rb_b - rb_t, rb_r - rb_l)))
         
         # Get the scaled down bounds
-        cropMargin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r = map(lambda x : round(x * self.outRes / b_w),
-       (cropMargin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r))
+        crop_margin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r = map(lambda x : round(x * self.out_res / b_w),
+       (crop_margin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r))
         
         # Scale down the crop
         img = TF.resize(img, (rb_b - rb_t, rb_r - rb_l), interpolation=Image.BILINEAR)
@@ -96,8 +96,8 @@ class LandingZoneDataset(Dataset):
         img = TF.rotate(img, angle, resample=Image.BILINEAR)
         gt = TF.rotate(gt, angle, resample=Image.BILINEAR)
         
-        img = TF.crop(img, cropMargin, cropMargin, self.outRes, self.outRes)
-        gt = TF.crop(gt, cropMargin, cropMargin, self.outRes, self.outRes)
+        img = TF.crop(img, crop_margin, crop_margin, self.out_res, self.out_res)
+        gt = TF.crop(gt, crop_margin, crop_margin, self.out_res, self.out_res)
         
         return (img.float() / 255, gt.float() / 255)
 
@@ -111,16 +111,16 @@ class LandingZoneDataset(Dataset):
 
         img_gt_ratio = round(img_res / gt_res)
         
-        z = np.exp(random.uniform(np.log(self.minZoom), np.log(self.maxZoom)))
+        z = np.exp(random.uniform(np.log(self.min_zoom), np.log(self.max_zoom)))
         
         if z >= 1:
             # RandomResizedCrop returns a crop within the bounds of the image
-            RRCScale = 1 / (z * z)
-            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRCScale, RRCScale), (1., 1.))
+            RRC_scale = 1 / (z * z)
+            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRC_scale, RRC_scale), (1., 1.))
             img = TF.crop(image, *map(lambda x : round(x * img_gt_ratio), (b_t, b_l, b_h, b_w)))
             gt = TF.crop(image_gt, b_t, b_l, b_h, b_w)
-            img = TF.resize(img, self.outRes)
-            gt = TF.resize(gt, self.outRes)
+            img = TF.resize(img, self.out_res)
+            gt = TF.resize(gt, self.out_res)
             return (img.float() / 255, gt.float() / 255)
         
         else:
@@ -128,7 +128,7 @@ class LandingZoneDataset(Dataset):
             b_h = b_w = round(gt_res / z)
             b_t = b_l = round((gt_res - b_h) / 2)
             
-            zone_res, b_h, b_w, b_t, b_l = map(lambda x : round(x * self.outRes / b_w),
+            zone_res, b_h, b_w, b_t, b_l = map(lambda x : round(x * self.out_res / b_w),
            (gt_res,   b_h, b_w, b_t, b_l))
             
             # Scale down the image
@@ -136,8 +136,8 @@ class LandingZoneDataset(Dataset):
             gt = TF.resize(image_gt, (zone_res, zone_res), interpolation=Image.BILINEAR)
             
             # Reflect pad up to extended boundaries
-            lpad = round((self.outRes - zone_res) / 2)
-            rpad = self.outRes - zone_res - lpad
+            lpad = round((self.out_res - zone_res) / 2)
+            rpad = self.out_res - zone_res - lpad
             if image.dim() == 3:
                 pad_size = ((0, 0), (lpad, rpad), (lpad, rpad))
             else:
@@ -152,11 +152,11 @@ class LandingZoneDataset(Dataset):
         return len(self.selection)
     
     def __getitem__(self, idx):
-        return self.transform(self.images[idx], self.groundTruth[idx])
+        return self.transform(self.images[idx], self.ground_truth[idx])
 
     def getAll(self, shuffle=True):
         if (shuffle):
             indices = torch.randperm(len(self.selection))
-            return self.transform(self.images[indices], self.groundTruth[indices])
+            return self.transform(self.images[indices], self.ground_truth[indices])
         else:
-            return self.transform(self.images, self.groundTruth)
+            return self.transform(self.images, self.ground_truth)

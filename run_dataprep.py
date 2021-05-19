@@ -43,13 +43,13 @@ def getPDSHeader(filename):
         
         key = ''
         value = ''
-        stringValue = False
+        string_value = False
         while True:
             s = readline()
             if s[0] == 'END':
                 break
             if s[0] != '/*':
-                if not stringValue and len(s) > 1 and s[1] == '=':
+                if not string_value and len(s) > 1 and s[1] == '=':
                     if key != '':
                         if len(value) == 1:
                             header[key] = value[0]
@@ -57,19 +57,19 @@ def getPDSHeader(filename):
                             header[key] = value
                     key = s[0]
                     if len(s) > 2 and s[2][0] == '"':
-                        stringValue = True
+                        string_value = True
                         value = ' '.join(s[2:])[1:]
                         if s[-1][-1] == '"':
                             value = value[:-1]
-                            stringValue = False
+                            string_value = False
                     else:
                         value = s[2:]                    
                 else:
-                    if stringValue:
+                    if string_value:
                         value += ' '.join(s)
                         if s[-1][-1] == '"':
                             value = value[:-1]
-                            stringValue = False
+                            string_value = False
                     else:
                         value += s                         
                 
@@ -105,7 +105,7 @@ def absmod(x, m): # Modulus going into the negatives to minimize absolute value
 
 # Returns the rotation and cropping parameters to be applied to the image to straighten it
 # Extra cropping is optionally applied to the top left of the image / dataset
-def getCropFactors(heightmap, header, aggressiveCrop = False, extraCrop = (0, 0)):
+def getCropFactors(heightmap, header, aggressive_crop = False, extra_crop = (0, 0)):
     lines = len(heightmap)
     cols = len(heightmap[0])
     missing_constant = struct.unpack('!f', bytes.fromhex(header["MISSING_CONSTANT"][3:-1]))
@@ -158,43 +158,43 @@ def getCropFactors(heightmap, header, aggressiveCrop = False, extraCrop = (0, 0)
         tl, tr, bl, br = rotate(left, rot, c), rotate(top, rot, c), rotate(bot, rot, c), rotate(right, rot, c)
     
     
-    if extraCrop == None:
-        extraCrop = (0, 0)
+    if extra_crop == None:
+        extra_crop = (0, 0)
     
-    if aggressiveCrop == True:
-        cropBox = (
-            max(tl[0], bl[0]) + extraCrop[0],
-            lines - min(tl[1], tr[1]) + extraCrop[1],
+    if aggressive_crop == True:
+        crop_box = (
+            max(tl[0], bl[0]) + extra_crop[0],
+            lines - min(tl[1], tr[1]) + extra_crop[1],
             min(tr[0], br[0]),
             lines - max(bl[1], br[1])
         )
-    elif aggressiveCrop == "top":
-        cropBox = (
-            max(tl[0], bl[0]) + extraCrop[0],
-            lines - min(tl[1], tr[1]) + extraCrop[1],
+    elif aggressive_crop == "top":
+        crop_box = (
+            max(tl[0], bl[0]) + extra_crop[0],
+            lines - min(tl[1], tr[1]) + extra_crop[1],
             max(tr[0], br[0]),
             lines - min(bl[1], br[1])
         )
     else:
-        cropBox = (
-            min(tl[0], bl[0]) + extraCrop[0],
-            lines - max(tl[1], tr[1]) + extraCrop[1],
+        crop_box = (
+            min(tl[0], bl[0]) + extra_crop[0],
+            lines - max(tl[1], tr[1]) + extra_crop[1],
             max(tr[0], br[0]),
             lines - min(bl[1], br[1])
         )
     
-    return rot * 180.0 / np.pi, cropBox
+    return rot * 180.0 / np.pi, crop_box
 
 # Partitions the image into a tensor, ignoring the specified squares
 def toTensor(img, res, ignore=[]):
-    xRange = range(0, img.size[0] - res, res)
-    yRange = range(0, img.size[1] - res, res)
-    N = len(xRange) * len(yRange)
+    x_range = range(0, img.size[0] - res, res)
+    y_range = range(0, img.size[1] - res, res)
+    N = len(x_range) * len(y_range)
     T = torch.empty((N - len(ignore), 1, res, res), dtype=torch.uint8)
     i_before = 0
     i_after = 0
-    for x in xRange:
-        for y in yRange:
+    for x in x_range:
+        for y in y_range:
             if i_before not in ignore:
                 T[i_after] = torch.from_numpy(np.array(img.crop((x, y, x + res, y + res))))
                 i_after += 1
@@ -209,30 +209,30 @@ def drawOutlinedText(drawer, x, y, text, font):
 
 
 # Saves a visual summary of the partition to the disk
-def printPartition(img, res, filename, ignore=[], resizeFactor=1, onlyGrid = False):
-    if resizeFactor == 1:
+def printPartition(img, res, filename, ignore=[], resize_factor=1, onlyGrid = False):
+    if resize_factor == 1:
         imgc = img.copy()
     else:
-        imgc = img.resize((round(img.size[0] * resizeFactor), round(img.size[1] * resizeFactor)))
+        imgc = img.resize((round(img.size[0] * resize_factor), round(img.size[1] * resize_factor)))
 
-    # /!\ If resizeFactor does not properly divide res, the partitioning will drift off in accuracy, so be careful.
-    res = round(res * resizeFactor)
-    xRange = range(0, imgc.size[0], res)
-    yRange = range(0, imgc.size[1], res)
+    # /!\ If resize_factor does not properly divide res, the partitioning will drift off in accuracy, so be careful.
+    res = round(res * resize_factor)
+    x_range = range(0, imgc.size[0], res)
+    y_range = range(0, imgc.size[1], res)
     drawer = ImageDraw.Draw(imgc)
     
-    for x in xRange:
-        drawer.line(((x, 0), (x, yRange[-1])), fill=0, width=5)
-    for y in yRange:
-        drawer.line(((0, y), (xRange[-1], y)), fill=0, width=5)
+    for x in x_range:
+        drawer.line(((x, 0), (x, y_range[-1])), fill=0, width=5)
+    for y in y_range:
+        drawer.line(((0, y), (x_range[-1], y)), fill=0, width=5)
     
     if not onlyGrid:
         font = ImageFont.truetype("OpenSans.ttf", max(10, round(res / 70) * 10))
         i_before = 0
         i_after = 0
         
-        for x in xRange[:-1]:
-            for y in yRange[:-1]:
+        for x in x_range[:-1]:
+            for y in y_range[:-1]:
                 if i_before in ignore:
                     drawer.line(((x+res, y), (x, y+res)), fill=0, width=6)
                     drawer.line(((x+res, y), (x, y+res)), fill=255, width=2)
@@ -242,17 +242,17 @@ def printPartition(img, res, filename, ignore=[], resizeFactor=1, onlyGrid = Fal
                     i_after += 1
                 i_before += 1
     
-    for x in xRange:
-        drawer.line(((x, 0), (x, yRange[-1])), fill=255, width=3)
-    for y in yRange:
-        drawer.line(((0, y), (xRange[-1], y)), fill=255, width=3)
+    for x in x_range:
+        drawer.line(((x, 0), (x, y_range[-1])), fill=255, width=3)
+    for y in y_range:
+        drawer.line(((0, y), (x_range[-1], y)), fill=255, width=3)
     
     imgc.save(filename)
 
 # Makes it easier to manually type an ignore list by expanding ranges when needed
-def expandIgnore(compressedIgnore):
+def expandIgnore(compressed_ignore):
     ignore = list()
-    for item in compressedIgnore:
+    for item in compressed_ignore:
         try:
             ignore.extend(range(item[0], item[1]+1))
         except TypeError:
@@ -260,88 +260,88 @@ def expandIgnore(compressedIgnore):
     return ignore
 
 # Load an ignore list from a heavily resized mask image
-def loadIgnoreFromMask(filename, res, resizeFactor):
+def loadIgnoreFromMask(filename, res, resize_factor):
     mask = Image.open(filename)
-    res = round(res * resizeFactor)
-    centerOffset = round(res / 2)
-    xRange = range(centerOffset, mask.size[0] - centerOffset, res)
-    yRange = range(centerOffset, mask.size[1] - centerOffset, res)
-    ignoreList = []
+    res = round(res * resize_factor)
+    center_offset = round(res / 2)
+    x_range = range(center_offset, mask.size[0] - center_offset, res)
+    y_range = range(center_offset, mask.size[1] - center_offset, res)
+    ignore_list = []
     i = 0
-    for x in xRange:
-        for y in yRange:
+    for x in x_range:
+        for y in y_range:
             if mask.getpixel((x, y)) == (255, 0, 0):
-                ignoreList.append(i)
+                ignore_list.append(i)
             i += 1
-    return ignoreList
+    return ignore_list
 
-def prepareDataset(zoneName, gridSize=1024, picResMultiplier=4, variant=1, useIgnoreFile=True, extraCrop=None):
+def prepareDataset(zone_name, grid_size=1024, pic_res_multiplier=4, variant=1, use_ignore_file=True, extra_crop=None):
     global G
-    print("Zone: " + zoneName)
+    print("Zone: " + zone_name)
     
-    if gridSize % picResMultiplier != 0:
-        print("Warning: grid size is not a multiple of picResMultiplier")
-    gridSize_hm = round(gridSize / picResMultiplier)
+    if grid_size % pic_res_multiplier != 0:
+        print("Warning: grid size is not a multiple of pic_res_multiplier")
+    grid_size_hm = round(grid_size / pic_res_multiplier)
     
-    zPartdir = join(partdir, zoneName + '_' + str(gridSize))
-    os.makedirs(zPartdir, exist_ok=True)
+    zone_part_dir = join(parts_dir, zone_name + '_' + str(grid_size))
+    os.makedirs(zone_part_dir, exist_ok=True)
     
     print("Loading heightmap...")
-    H, header = loadHeightmap(join(hmdir, zoneName + ".IMG"))
+    H, header = loadHeightmap(join(hmdir, zone_name + ".IMG"))
     print("Computing slope...")
     G_np = getSlope(H)
     print("Computing image rotation correction factors...")
-    rot, box = getCropFactors(H, header, aggressiveCrop="top", extraCrop=extraCrop)
+    rot, box = getCropFactors(H, header, aggressive_crop="top", extra_crop=extra_crop)
     G_np = (G_np * 255).astype(np.uint8)
     G = Image.fromarray(G_np)
     del G_np
     print("Correcting slope map rotation...")
     G = G.rotate(rot).crop(np.round(box))
     
-    maskFile = join(zPartdir, "mask.png")
+    mask_file = join(zone_part_dir, "mask.png")
     
-    if not exists(maskFile):
+    if not exists(mask_file):
         print("Mask file doesn't exist, creating empty mask.")
-        printPartition(G, gridSize_hm, join(zPartdir, "emptymask.png"), onlyGrid=True)
+        printPartition(G, grid_size_hm, join(zone_part_dir, "emptymask.png"), onlyGrid=True)
         return
     
     print("Loading mask file...")
-    ignore = loadIgnoreFromMask(maskFile, gridSize_hm, 1)
+    ignore = loadIgnoreFromMask(mask_file, grid_size_hm, 1)
     print("Mask loaded, ignores " + str(len(ignore)) + " spots.")
     
-    if useIgnoreFile:
-        ignoreFile = join(zPartdir, "ignore.pickle")
-        if not exists(ignoreFile):
+    if use_ignore_file:
+        ignore_file = join(zone_part_dir, "ignore.pickle")
+        if not exists(ignore_file):
             print("Ignore file not found, creating.")
-            pickle.dump(ignore, open(ignoreFile, 'wb'))
+            pickle.dump(ignore, open(ignore_file, 'wb'))
         else:
             print("Comparing existing ignore file to mask...")
-            loaded_ignore = pickle.load(open(ignoreFile, 'rb'))
+            loaded_ignore = pickle.load(open(ignore_file, 'rb'))
             if loaded_ignore == ignore:
                 cont_ans = input("Unchanged ignore list, still create tensors?\n")
                 if (cont_ans.lower() not in ("y", "yes")):
                     return
             else:
                 print("Ignore list changed, updating ignore file.")
-                pickle.dump(ignore, open(ignoreFile, 'wb'))
+                pickle.dump(ignore, open(ignore_file, 'wb'))
 
     print("Creating slope tensor...")    
-    G_T = toTensor(G, gridSize_hm, ignore)
-    torch.save(G_T, join(zPartdir, "slope.ts"))
+    G_T = toTensor(G, grid_size_hm, ignore)
+    torch.save(G_T, join(zone_part_dir, "slope.ts"))
     print("Printing slope partition...")
-    printPartition(G, gridSize_hm, join(zPartdir, "slope.part.png"), ignore)
+    printPartition(G, grid_size_hm, join(zone_part_dir, "slope.part.png"), ignore)
     del G, G_T    
     
     print("Loading satellite picture...")
-    I = Image.open(join(picdir, zoneName + '_' + str(variant) + ".bmp"))
+    I = Image.open(join(picdir, zone_name + '_' + str(variant) + ".bmp"))
     print("Correcting image rotation...")
     I = I.rotate(rot)
-    I = I.crop(np.array(box) * picResMultiplier)
+    I = I.crop(np.array(box) * pic_res_multiplier)
     print("Creating satellite tensor...")
-    I_T = toTensor(I, gridSize, ignore)
-    torch.save(I_T, join(zPartdir, "sat_" + str(variant) + ".ts"))
+    I_T = toTensor(I, grid_size, ignore)
+    torch.save(I_T, join(zone_part_dir, "sat_" + str(variant) + ".ts"))
     print("Printing satellite partition...")
-    printPartition(I, gridSize, join(zPartdir, "sat_" + str(variant) + ".part.png"), ignore, 1 / picResMultiplier)
+    printPartition(I, grid_size, join(zone_part_dir, "sat_" + str(variant) + ".part.png"), ignore, 1 / pic_res_multiplier)
     del I, I_T
 
 
@@ -350,7 +350,7 @@ def prepareDataset(zoneName, gridSize=1024, picResMultiplier=4, variant=1, useIg
 
 hmdir = "data/heightmaps"
 picdir = "data/satellite_pictures"
-partdir = "data/partitioned_datasets"
+parts_dir = "data/partitioned_datasets"
 
 zones = (
     "Crommelin",
@@ -368,58 +368,58 @@ extraCrops = (
     None
 )
 
-gridSize = 2048
+grid_size = 2048
 
 #%%
 for z, xcrop in zip(zones, extraCrops):
-    prepareDataset(z, gridSize=gridSize, variant=2, extraCrop = xcrop)
+    prepareDataset(z, grid_size=grid_size, variant=2, extra_crop = xcrop)
     print()
 
 #%% Postprocessing
 from postprocessing import getViabilityMap, saveProcessedSample
 
 for z in zones:
-    dsdir = z + '_' + str(gridSize)
+    dsdir = z + '_' + str(grid_size)
     print("Loading slope tensor...")
-    gt_T = torch.load(join(partdir, dsdir, "slope.ts"))
-    saveProcessedSample(gt_T, join(partdir, dsdir, "slope_processed.sample.png"))
+    gt_T = torch.load(join(parts_dir, dsdir, "slope.ts"))
+    saveProcessedSample(gt_T, join(parts_dir, dsdir, "slope_processed.sample.png"))
     
     print("Computing full VMap...")
     pgt_T = getViabilityMap(gt_T)
     print("Saving processed tensor...")
-    torch.save(pgt_T, join(partdir, dsdir, "slope_processed.ts"))
+    torch.save(pgt_T, join(parts_dir, dsdir, "slope_processed.ts"))
     
 #%% Unification
 
 unified_ds_name = "Unified"
-unified_ds_dir = join(partdir, unified_ds_name + '_' + str(gridSize))
+unified_ds_dir = join(parts_dir, unified_ds_name + '_' + str(grid_size))
 os.makedirs(unified_ds_dir, exist_ok=True)
 
 #%%
 
 U_T = torch.ByteTensor([])
 for z in zones:
-    dsdir = join(partdir, z + '_' + str(gridSize))
+    dsdir = join(parts_dir, z + '_' + str(grid_size))
     U_T = torch.cat((U_T, torch.load(join(dsdir, "sat_1.ts"))), 0)
 np.save(join(unified_ds_dir, "sat_1.npy"), U_T.numpy())
 
 #%%
 U_T = torch.ByteTensor([])
 for z in zones:
-    dsdir = join(partdir, z + '_' + str(gridSize))
+    dsdir = join(parts_dir, z + '_' + str(grid_size))
     U_T = torch.cat((U_T, torch.load(join(dsdir, "sat_2.ts"))), 0)
 np.save(join(unified_ds_dir, "sat_2.npy"), U_T.numpy())
 
 #%%
 U_T = torch.ByteTensor([])
 for z in zones:
-    dsdir = join(partdir, z + '_' + str(gridSize))
+    dsdir = join(parts_dir, z + '_' + str(grid_size))
     U_T = torch.cat((U_T, torch.load(join(dsdir, "slope.ts"))), 0)
 np.save(join(unified_ds_dir, "slope.npy"), U_T.numpy())
 
 #%%
 U_T = torch.ByteTensor([])
 for z in zones:
-    dsdir = join(partdir, z + '_' + str(gridSize))
+    dsdir = join(parts_dir, z + '_' + str(grid_size))
     U_T = torch.cat((U_T, torch.load(join(dsdir, "slope_processed.ts"))), 0)
 np.save(join(unified_ds_dir, "slope_processed.npy"), U_T.numpy())

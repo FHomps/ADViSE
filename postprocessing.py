@@ -20,25 +20,25 @@ def gaussian_blur(img, ksize=3, strength=1):
     
     weights *= 1 / torch.sum(weights)
     if ksize % 2 != 0:
-        padSize = (int(ksize / 2),)*4
+        pad_size = (int(ksize / 2),)*4
     else:
-        padSize = (int(ksize / 2) - 1, int(ksize / 2)) * 2
-    return conv2d(pad(img, padSize, mode='replicate'), weights)
+        pad_size = (int(ksize / 2) - 1, int(ksize / 2)) * 2
+    return conv2d(pad(img, pad_size, mode='replicate'), weights)
 
 def quantile_filter(img, ksize=3, quantile=.5):
     if ksize % 2 != 0:
-        padSize = (int(ksize / 2),)*4
+        pad_size = (int(ksize / 2),)*4
     else:
-        padSize = (int(ksize / 2) - 1, int(ksize / 2)) * 2
-    img_unf = unfold(pad(img, padSize, value=np.nan), ksize)
+        pad_size = (int(ksize / 2) - 1, int(ksize / 2)) * 2
+    img_unf = unfold(pad(img, pad_size, value=np.nan), ksize)
     return img_unf.nanquantile(quantile, 1, keepdim=True).reshape(img.size())
 
 def quantile_filter_inplace(img, ksize=3, quantile=.5):
     if ksize % 2 != 0:
-        padSize = (int(ksize / 2),)*4
+        pad_size = (int(ksize / 2),)*4
     else:
-        padSize = (int(ksize / 2) - 1, int(ksize / 2)) * 2
-    img_unf = unfold(pad(img, padSize, value=np.nan), ksize)
+        pad_size = (int(ksize / 2) - 1, int(ksize / 2)) * 2
+    img_unf = unfold(pad(img, pad_size, value=np.nan), ksize)
     flat_img = img.view(*img.size()[:2], img.size(2) * img.size(3))
     torch.nanquantile(img_unf, quantile, 1, keepdim=True, out=flat_img)
 

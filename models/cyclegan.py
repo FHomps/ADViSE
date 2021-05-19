@@ -10,12 +10,12 @@ from .model import Model
 from .utils import StatTracker
 
 def weights_init_normal(m):
-    classname = m.__class__.__name__
-    if classname.find("Conv") != -1:
+    class_name = m.__class__.__name__
+    if class_name.find("Conv") != -1:
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
         if hasattr(m, "bias") and m.bias is not None:
             torch.nn.init.constant_(m.bias.data, 0.0)
-    elif classname.find("BatchNorm2d") != -1:
+    elif class_name.find("BatchNorm2d") != -1:
         torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
         torch.nn.init.constant_(m.bias.data, 0.0)
 
@@ -151,10 +151,10 @@ class ReplayBuffer:
         return torch.cat(to_return)
 
 class CycleGAN(Model):
-    def __init__(self, device, imgRes, channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, n_residual_blocks=9, lambda_id=5.0, lambda_cyc=10.0, extraLosses={}):
+    def __init__(self, device, img_res, channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, n_residual_blocks=9, lambda_id=5.0, lambda_cyc=10.0, extra_losses={}):
         super(CycleGAN, self).__init__()
         
-        input_shape = (channels, imgRes, imgRes)
+        input_shape = (channels, img_res, img_res)
         self.G_AB = GeneratorResNet(input_shape, n_residual_blocks).to(device)
         self.G_BA = GeneratorResNet(input_shape, n_residual_blocks).to(device)
         self.D_A = Discriminator(input_shape).to(device)
@@ -178,10 +178,10 @@ class CycleGAN(Model):
 
         self.Tensor = torch.cuda.FloatTensor if device.type=="cuda" else torch.FloatTensor
         
-        self.extraLosses = extraLosses
+        self.extra_losses = extra_losses
         self.initWeights()
     
-    def train(self, inp, label, computeExtraLosses=True):        
+    def train(self, inp, label, compute_extra_losses=True):        
         real_A = inp.type(self.Tensor)
         real_B = label.type(self.Tensor)
 
@@ -277,13 +277,13 @@ class CycleGAN(Model):
         losses["DLoss_B"] = loss_D_B.item()
         losses["DLoss"] = loss_D.item()
 
-        if computeExtraLosses:
-            for k, l in self.extraLosses.items():
+        if compute_extra_losses:
+            for k, l in self.extra_losses.items():
                 losses[k] = l(fake_B, real_B).item()
         
         return losses
                 
-    def evaluate(self, inp, label, computeExtraLosses=True):
+    def evaluate(self, inp, label, compute_extra_losses=True):
         self.G_AB.eval()
         self.G_BA.eval()
         self.D_A.eval()
@@ -347,8 +347,8 @@ class CycleGAN(Model):
             losses["DLoss_B"] = loss_D_B.item()
             losses["DLoss"] = loss_D.item()
     
-            if computeExtraLosses:
-                for k, l in self.extraLosses.items():
+            if compute_extra_losses:
+                for k, l in self.extra_losses.items():
                     losses[k] = l(fake_B, real_B).item()
             
             return fake_B, losses
