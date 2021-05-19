@@ -105,10 +105,13 @@ class GeneratorUNet(nn.Module):
 
 
 class Pix1Pix(Model):
-    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extraLosses={}):
+    def __init__(self, device, imgRes, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extraLosses={}, useMSE=False):
         super(Pix1Pix, self).__init__()
         
-        self.criterion_pixelwise = torch.nn.L1Loss().to(device)
+        if useMSE:
+            self.criterion_pixelwise = torch.nn.MSELoss().to(device)
+        else:
+            self.criterion_pixelwise = torch.nn.L1Loss().to(device)
         
         self.generator = GeneratorUNet(in_channels, out_channels).to(device)
         
@@ -133,7 +136,7 @@ class Pix1Pix(Model):
         self.optimizer_G.step()
         losses = {}
         
-        losses["GLoss"] = loss_G.item()
+        losses["GLoss_pixel"] = loss_G.item()
         
         if computeExtraLosses:
             for k, l in self.extraLosses.items():
@@ -153,7 +156,7 @@ class Pix1Pix(Model):
             
             losses = {}
             
-            losses["GLoss"] = loss_G.item()
+            losses["GLoss_pixel"] = loss_G.item()
             
             if computeExtraLosses:
                 for k, l in self.extraLosses.items():
