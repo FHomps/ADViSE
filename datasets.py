@@ -110,7 +110,7 @@ class LandingZoneDataset(Dataset):
 
 
     def __len__(self):
-        return len(self.selection)
+        return self.images.size(0)
     
     def __getitem__(self, idx):
         return self.transform(self.images[idx], self.groundTruth[idx])
