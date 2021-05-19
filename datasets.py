@@ -4,7 +4,7 @@ import collections
 
 from torch.utils.data import Dataset
 from PIL import Image
-import torchvision.transforms as transforms
+import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 
 import torch
@@ -12,45 +12,27 @@ from torch import tensor
 
 class LandingZoneDataset(Dataset):
     def __init__(self, img_tensor, gt_tensor, selection, outRes = 128,
-                 minSizeRatio = 1/3, maxSizeRatio = 1., rotate = True, compensateCorners = True, twin_img_tensor = None):
+                 minZoom = 0.125, maxZoom = 8, rotate = True, twin_img_tensor = None):
         
         self.selection = tensor(selection, dtype=torch.int64)
         self.images = torch.index_select(img_tensor, 0, self.selection)
-        if twin_img_tensor != None:
-            self.images = torch.cat((self.images, torch.index_select(twin_img_tensor, 0, self.selection)), 0)
         self.groundTruth = torch.index_select(gt_tensor, 0, self.selection)
         if twin_img_tensor != None:
+            self.images = torch.cat((self.images, torch.index_select(twin_img_tensor, 0, self.selection)), 0)
             self.groundTruth = self.groundTruth.repeat((2, 1, 1, 1))
         
         self.img_size = self.images.size()[-1]
         self.gt_size = self.groundTruth.size()[-1]
 
         self.outRes = outRes
-        self.RRC_scale = (minSizeRatio**2, maxSizeRatio**2)
+        self.minZoom = minZoom
+        self.maxZoom = maxZoom
         if rotate:
-            if compensateCorners:
-                self.transform = self.transform_compensated_rotate
-            else:
-                self.transform = self.transform_rotate
+            self.transform = self.transform_rotate
         else:
-            self.transform = self.transform_noRotate
-        
-    def transform_noRotate(self, image, image_gt):
-        RCParams_gt = np.array(transforms.RandomResizedCrop.get_params(image_gt, self.RRC_scale, (1., 1.)))
-        RCParams_img = RCParams_gt * round(self.img_size / self.gt_size)
-        
-        return (TF.resize(TF.crop(image, *RCParams_img), self.outRes).float() / 255,
-                TF.resize(TF.crop(image_gt, *RCParams_gt), self.outRes).float() / 255)
-        
+            self.transform = self.transform_norotate
+    
     def transform_rotate(self, image, image_gt):
-        RCParams_gt = np.array(transforms.RandomResizedCrop.get_params(image_gt, self.RRC_scale, (1., 1.)))
-        RCParams_img = RCParams_gt * round(self.img_size / self.gt_size)
-        angle = random.random() * 180
-        
-        return (TF.rotate(TF.resize(TF.crop(image, *RCParams_img), self.outRes), angle, resample=Image.BILINEAR).float() / 255,
-                TF.rotate(TF.resize(TF.crop(image_gt, *RCParams_gt), self.outRes), angle, resample=Image.BILINEAR).float() / 255)
-
-    def transform_compensated_rotate(self, image, image_gt):
         if image.dim() == 3:
             channels_img, _, img_res = image.size()
             channels_gt, _, gt_res = image_gt.size()
@@ -58,56 +40,113 @@ class LandingZoneDataset(Dataset):
             batchSize, channels_img, _, img_res = image.size()
             _, channels_gt, _, gt_res = image_gt.size()
 
-        sizeRatio = round(img_res / gt_res)
+        img_gt_ratio = round(img_res / gt_res)
         
-        # RandomResizedCrop returns a crop within the bounds of the image
-        i, j, h, w = transforms.RandomResizedCrop.get_params(image_gt, self.RRC_scale, (1., 1.))
+        z = np.exp(random.uniform(np.log(self.minZoom), np.log(self.maxZoom)))
 
-        # The crop boundaries are expanded by an optimal margin to include more data and minimize black corners after rotation
-        angle = random.random() * 180
+        # Compute extended crop boundaries (with margin for rotate)
+        
+        # First, get standard crop boundaries.
+        if z < 1:
+            b_h = b_w = round(gt_res / z)
+            b_t = b_l = round((gt_res - b_h) / 2)
+        else:
+            # RandomResizedCrop returns a crop within the bounds of the image
+            RRCScale = 1 / (z * z)
+            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRCScale, RRCScale), (1., 1.))
+            
+        # The crop boundaries are extended by an optimal margin to include more data and minimize black corners after rotation
+        angle = random.random() * 360
         alpha = (45 - abs((angle % 90) - 45)) * np.pi / 180
         expansionRatio = np.cos(alpha) + np.sin(alpha)
-        cropMargin = int((expansionRatio - 1) * w / 2 + 1)
+        cropMargin = int((expansionRatio - 1) * b_w / 2 + 1)
 
-        i -= cropMargin
-        j -= cropMargin
-        h += 2 * cropMargin
-        w += 2 * cropMargin
-
-        # pytorch / torchvision's crop doesn't support out-of-bounds coordinates, so we have to do it manually.
-
-        # Coordinates from which the pixels are copied in the original gt
-        copyBox_gt = np.array([max(i, 0), min(gt_res, i + h), max(j, 0), min(gt_res, j + w)])
-        # Coordinates in which the pixels are pasted in the cropped gt
-        pasteBox_gt = np.array([max(-i, 0), min(gt_res - i, h), max(-j, 0), min(gt_res - j, w)])
-        # Same for the image
-        copyBox_img = copyBox_gt * sizeRatio
-        pasteBox_img = pasteBox_gt * sizeRatio
-
-        if (image.dim() == 3):
-            cropped_gt = image_gt.new_zeros((channels_gt, h, w))
-            cropped_img = image.new_zeros((channels_img, h * sizeRatio, w * sizeRatio))
-
-            cropped_gt[:, pasteBox_gt[0]:pasteBox_gt[1], pasteBox_gt[2]:pasteBox_gt[3]] = \
-                image_gt[:, copyBox_gt[0]:copyBox_gt[1], copyBox_gt[2]:copyBox_gt[3]]
-            cropped_img[:, pasteBox_img[0]:pasteBox_img[1], pasteBox_img[2]:pasteBox_img[3]] = \
-                image[:, copyBox_img[0]:copyBox_img[1], copyBox_img[2]:copyBox_img[3]]
-        else:
-            cropped_gt = image_gt.new_zeros((batchSize, channels_gt, h, w))
-            cropped_img = image.new_zeros((batchSize, channels_img, h * sizeRatio, w * sizeRatio))
-
-            cropped_gt[:, :, pasteBox_gt[0]:pasteBox_gt[1], pasteBox_gt[2]:pasteBox_gt[3]] = \
-                image_gt[:, :, copyBox_gt[0]:copyBox_gt[1], copyBox_gt[2]:copyBox_gt[3]]
-            cropped_img[:, :, pasteBox_img[0]:pasteBox_img[1], pasteBox_img[2]:pasteBox_img[3]] = \
-                image[:, :, copyBox_img[0]:copyBox_img[1], copyBox_img[2]:copyBox_img[3]]
-    
-        resMargin = int(((expansionRatio - 1) * self.outRes) / 2 + 1)
-        expandedRes = self.outRes + resMargin * 2
-        FinalCropParams = (resMargin, resMargin, self.outRes, self.outRes)
+        eb_t = b_t - cropMargin
+        eb_l = b_l - cropMargin
+        eb_b = eb_t + b_h + 2 * cropMargin
+        eb_r = eb_l + b_w + 2 * cropMargin
         
-        return (TF.crop(TF.rotate(TF.resize(cropped_img, expandedRes), angle, resample=Image.BILINEAR), *FinalCropParams).float() / 255,
-                TF.crop(TF.rotate(TF.resize(cropped_gt, expandedRes), angle, resample=Image.BILINEAR), *FinalCropParams).float() / 255)
+        # Get restricted bounds: intersection of extended bounds and image bounds
+        rb_t = max(eb_t, 0)
+        rb_l = max(eb_l, 0)
+        rb_b = min(eb_b, gt_res)
+        rb_r = min(eb_r, gt_res)
+        
+        gt = TF.crop(image_gt, rb_t, rb_l, rb_b - rb_t, rb_r - rb_l)
+        img = TF.crop(image, *map(lambda x : round(x * img_gt_ratio), (rb_t, rb_l, rb_b - rb_t, rb_r - rb_l)))
+        
+        # Get the scaled down bounds
+        cropMargin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r = map(lambda x : round(x * self.outRes / b_w),
+       (cropMargin, eb_t, eb_l, eb_b, eb_r, rb_t, rb_l, rb_b, rb_r))
+        
+        # Scale down the crop
+        img = TF.resize(img, (rb_b - rb_t, rb_r - rb_l), interpolation=Image.BILINEAR)
+        gt = TF.resize(gt, (rb_b - rb_t, rb_r - rb_l), interpolation=Image.BILINEAR)
+        
+        # Reflect pad up to extended boundaries
+        if image.dim() == 3:
+            pad_size = ((0, 0), (rb_t - eb_t, eb_b - rb_b), (rb_l - eb_l, eb_r - rb_r))
+        else:
+            pad_size = ((0, 0), (0, 0), (rb_t - eb_t, eb_b - rb_b), (rb_l - eb_l, eb_r - rb_r))
+        # PyTorch's pad doesn't support reflect padding on big areas, so numpy is used
+        img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode='wrap'))
+        gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode='wrap'))
+        
+        # Now, do the rotation and crop to the final size
+        img = TF.rotate(img, angle, resample=Image.BILINEAR)
+        gt = TF.rotate(gt, angle, resample=Image.BILINEAR)
+        
+        img = TF.crop(img, cropMargin, cropMargin, self.outRes, self.outRes)
+        gt = TF.crop(gt, cropMargin, cropMargin, self.outRes, self.outRes)
+        
+        return (img.float() / 255, gt.float() / 255)
 
+    def transform_norotate(self, image, image_gt):
+        if image.dim() == 3:
+            channels_img, _, img_res = image.size()
+            channels_gt, _, gt_res = image_gt.size()
+        else:
+            batchSize, channels_img, _, img_res = image.size()
+            _, channels_gt, _, gt_res = image_gt.size()
+
+        img_gt_ratio = round(img_res / gt_res)
+        
+        z = np.exp(random.uniform(np.log(self.minZoom), np.log(self.maxZoom)))
+        
+        if z >= 1:
+            # RandomResizedCrop returns a crop within the bounds of the image
+            RRCScale = 1 / (z * z)
+            b_t, b_l, b_h, b_w = T.RandomResizedCrop.get_params(image_gt, (RRCScale, RRCScale), (1., 1.))
+            img = TF.crop(image, *map(lambda x : round(x * img_gt_ratio), (b_t, b_l, b_h, b_w)))
+            gt = TF.crop(image_gt, b_t, b_l, b_h, b_w)
+            img = TF.resize(img, self.outRes)
+            gt = TF.resize(gt, self.outRes)
+            return (img.float() / 255, gt.float() / 255)
+        
+        else:
+            # Get scaled down crop boundaries
+            b_h = b_w = round(gt_res / z)
+            b_t = b_l = round((gt_res - b_h) / 2)
+            
+            zone_res, b_h, b_w, b_t, b_l = map(lambda x : round(x * self.outRes / b_w),
+           (gt_res,   b_h, b_w, b_t, b_l))
+            
+            # Scale down the image
+            img = TF.resize(image, (zone_res, zone_res), interpolation=Image.BILINEAR)
+            gt = TF.resize(image_gt, (zone_res, zone_res), interpolation=Image.BILINEAR)
+            
+            # Reflect pad up to extended boundaries
+            lpad = round((self.outRes - zone_res) / 2)
+            rpad = self.outRes - zone_res - lpad
+            if image.dim() == 3:
+                pad_size = ((0, 0), (lpad, rpad), (lpad, rpad))
+            else:
+                pad_size = ((0, 0), (0, 0), (lpad, rpad), (lpad, rpad))
+            # PyTorch's pad doesn't support reflect padding on big areas, so numpy is used
+            img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode='wrap'))
+            gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode='wrap'))
+            
+            return (img.float() / 255, gt.float() / 255)
 
     def __len__(self):
         return self.images.size(0)
