@@ -137,7 +137,7 @@ class Discriminator(nn.Module):
 
 
 class Pix2Pix(Model):
-    def __init__(self, device, img_res, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, extra_losses={}, use_MSE=False):
+    def __init__(self, device, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, lambda_px=100, extra_losses={}, use_MSE=False):
         super(Pix2Pix, self).__init__()
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
@@ -146,8 +146,6 @@ class Pix2Pix(Model):
         else:
             self.criterion_pixelwise = torch.nn.L1Loss().to(device)
         self.lambda_pixel = lambda_px
-        # The discriminator will estimate the credibility of each patch of pixels
-        self.patch = (1, img_res // 2 ** 4, img_res // 2 ** 4)
         
         self.generator = GeneratorUNet(in_channels, out_channels).to(device)
         self.discriminator = Discriminator(in_channels).to(device)
@@ -166,8 +164,11 @@ class Pix2Pix(Model):
         real_in = inp.type(self.Tensor)
         real_out = label.type(self.Tensor)
         
-        valid = self.Tensor(np.ones((real_in.size(0), *self.patch)))
-        fake = self.Tensor(np.zeros((real_in.size(0), *self.patch)))
+        # Size of the generator output (it evaluates patches of 16x16 pixels)
+        patch_map = (*real_in.size()[0:2], *map(lambda x : x//(2**4), real_in.size()[2:4]))
+        
+        valid = self.Tensor(np.ones(patch_map))
+        fake = self.Tensor(np.zeros(patch_map))
         
         self.optimizer_G.zero_grad()
         
@@ -223,8 +224,10 @@ class Pix2Pix(Model):
             real_in = inp.type(self.Tensor)
             real_out = label.type(self.Tensor)
 
-            valid = self.Tensor(np.ones((real_in.size(0), *self.patch)))
-            fake = self.Tensor(np.zeros((real_in.size(0), *self.patch)))
+            patch_map = (*real_in.size()[0:2], *map(lambda x : x//(2**4), real_in.size()[2:4]))
+            
+            valid = self.Tensor(np.ones(patch_map))
+            fake = self.Tensor(np.zeros(patch_map))
 
             fake_out = self.generator(real_in)
             fake_pred = self.discriminator(fake_out, real_in)

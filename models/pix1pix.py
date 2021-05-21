@@ -105,7 +105,7 @@ class GeneratorUNet(nn.Module):
 
 
 class Pix1Pix(Model):
-    def __init__(self, device, img_res, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extra_losses={}, use_MSE=False):
+    def __init__(self, device, in_channels=1, out_channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, extra_losses={}, use_MSE=False):
         super(Pix1Pix, self).__init__()
         
         if use_MSE:
