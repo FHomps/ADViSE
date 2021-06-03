@@ -44,10 +44,10 @@ class ResidualBlock(nn.Module):
 
 
 class GeneratorResNet(nn.Module):
-    def __init__(self, input_shape, num_residual_blocks):
+    def __init__(self, in_channels, num_residual_blocks):
         super(GeneratorResNet, self).__init__()
 
-        channels = input_shape[0]
+        channels = in_channels
 
         # Initial convolution block
         out_features = 64
@@ -100,14 +100,16 @@ class GeneratorResNet(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_shape):
+    def __init__(self, in_channels):
         super(Discriminator, self).__init__()
 
-        channels, height, width = input_shape
+        # channels, height, width = input_shape
+        
+        # # Calculate output shape of image discriminator (PatchGAN)
+        # self.output_shape = (1, height // 2 ** 4, width // 2 ** 4)
 
-        # Calculate output shape of image discriminator (PatchGAN)
-        self.output_shape = (1, height // 2 ** 4, width // 2 ** 4)
-
+        channels = in_channels
+        
         def discriminator_block(in_filters, out_filters, normalize=True):
             """Returns downsampling layers of each discriminator block"""
             layers = [nn.Conv2d(in_filters, out_filters, 4, stride=2, padding=1)]
@@ -151,14 +153,13 @@ class ReplayBuffer:
         return torch.cat(to_return)
 
 class CycleGAN(Model):
-    def __init__(self, device, img_res, channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, n_residual_blocks=9, lambda_id=5.0, lambda_cyc=10.0, extra_losses={}):
+    def __init__(self, device, channels=1, learning_rate=0.0002, b1=0.5, b2=0.999, n_residual_blocks=9, lambda_id=5.0, lambda_cyc=10.0, extra_losses={}):
         super(CycleGAN, self).__init__()
         
-        input_shape = (channels, img_res, img_res)
-        self.G_AB = GeneratorResNet(input_shape, n_residual_blocks).to(device)
-        self.G_BA = GeneratorResNet(input_shape, n_residual_blocks).to(device)
-        self.D_A = Discriminator(input_shape).to(device)
-        self.D_B = Discriminator(input_shape).to(device)
+        self.G_AB = GeneratorResNet(channels, n_residual_blocks).to(device)
+        self.G_BA = GeneratorResNet(channels, n_residual_blocks).to(device)
+        self.D_A = Discriminator(channels).to(device)
+        self.D_B = Discriminator(channels).to(device)
         
         self.criterion_GAN = torch.nn.MSELoss().to(device)
         self.criterion_cycle = torch.nn.L1Loss().to(device)
@@ -185,10 +186,10 @@ class CycleGAN(Model):
         real_A = inp.type(self.Tensor)
         real_B = label.type(self.Tensor)
 
-        
-        valid = self.Tensor(np.ones((real_A.size(0), *self.D_A.output_shape)))
+        discriminator_output_shape = (1, real_A.size(2) // 2 ** 4, real_A.size(3) // 2 ** 4)
+        valid = self.Tensor(np.ones((real_A.size(0), *discriminator_output_shape)))
         valid.requires_grad = False
-        fake = self.Tensor(np.zeros((real_A.size(0), *self.D_A.output_shape)))
+        fake = self.Tensor(np.zeros((real_A.size(0), *discriminator_output_shape)))
         fake.requires_grad = False
         
         self.G_AB.train()
@@ -293,8 +294,9 @@ class CycleGAN(Model):
             real_A = inp.type(self.Tensor)
             real_B = label.type(self.Tensor)
     
-            valid = self.Tensor(np.ones((real_A.size(0), *self.D_A.output_shape)))
-            fake = self.Tensor(np.zeros((real_A.size(0), *self.D_A.output_shape)))
+            discriminator_output_shape = (1, real_A.size(2) // 2 ** 4, real_A.size(3) // 2 ** 4)
+            valid = self.Tensor(np.ones((real_A.size(0), *discriminator_output_shape)))
+            fake = self.Tensor(np.zeros((real_A.size(0), *discriminator_output_shape)))
       
             loss_id_A = self.criterion_identity(self.G_BA(real_A), real_A)
             loss_id_B = self.criterion_identity(self.G_AB(real_B), real_B)
@@ -315,14 +317,12 @@ class CycleGAN(Model):
     
 
             loss_real_A = self.criterion_GAN(self.D_A(real_A), valid)
-            fake_A_buf = self.fake_A_buffer.push_and_pop(fake_A)
-            loss_fake_A = self.criterion_GAN(self.D_A(fake_A_buf.detach()), fake)
+            loss_fake_A = self.criterion_GAN(self.D_A(fake_A), fake)
             loss_D_A = (loss_real_A + loss_fake_A) / 2
     
 
             loss_real_B = self.criterion_GAN(self.D_B(real_B), valid)
-            fake_B_buf = self.fake_B_buffer.push_and_pop(fake_B)
-            loss_fake_B = self.criterion_GAN(self.D_B(fake_B_buf.detach()), fake)
+            loss_fake_B = self.criterion_GAN(self.D_B(fake_B), fake)
             loss_D_B = (loss_real_B + loss_fake_B) / 2
     
             loss_D = (loss_D_A + loss_D_B) / 2
