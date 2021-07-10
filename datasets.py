@@ -12,7 +12,7 @@ from torch import tensor
 
 class LandingZoneDataset(Dataset):
     def __init__(self, img_tensor, gt_tensor, selection, out_res = 128,
-                 min_zoom = 0.125, max_zoom = 8, rotate = True, twin_img_tensor = None):
+                 min_zoom = 0.125, max_zoom = 8, padding_mode="wrap", rotate = True, twin_img_tensor = None):
         
         self.selection = tensor(selection, dtype=torch.int64)
         self.images = torch.index_select(img_tensor, 0, self.selection)
@@ -31,6 +31,7 @@ class LandingZoneDataset(Dataset):
             self.transform = self.transform_rotate
         else:
             self.transform = self.transform_norotate
+        self.padding_mode = padding_mode
     
     def transform_rotate(self, image, image_gt):
         if image.dim() == 3:
@@ -89,8 +90,8 @@ class LandingZoneDataset(Dataset):
         else:
             pad_size = ((0, 0), (0, 0), (rb_t - eb_t, eb_b - rb_b), (rb_l - eb_l, eb_r - rb_r))
         # PyTorch's pad doesn't support reflect padding on big areas, so numpy is used
-        img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode='wrap'))
-        gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode='wrap'))
+        img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode=self.padding_mode))
+        gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode=self.padding_mode))
         
         # Now, do the rotation and crop to the final size
         img = TF.rotate(img, angle, resample=Image.BILINEAR)
@@ -143,8 +144,8 @@ class LandingZoneDataset(Dataset):
             else:
                 pad_size = ((0, 0), (0, 0), (lpad, rpad), (lpad, rpad))
             # PyTorch's pad doesn't support reflect padding on big areas, so numpy is used
-            img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode='wrap'))
-            gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode='wrap'))
+            img = torch.from_numpy(np.pad(img.numpy(), pad_size, mode=self.padding_mode))
+            gt = torch.from_numpy(np.pad(gt.numpy(), pad_size, mode=self.padding_mode))
             
             return (img.float() / 255, gt.float() / 255)
 
