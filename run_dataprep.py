@@ -25,6 +25,7 @@ import torch
 from os.path import join, exists
 import os
 import pickle
+from ADViSE.postprocessing import getViabilityMap, saveProcessedSample
 
 def printDict(d):
     for key, value in d.items():
@@ -376,7 +377,6 @@ for z, xcrop in zip(zones, extraCrops):
     print()
 
 #%% Postprocessing
-from postprocessing import getViabilityMap, saveProcessedSample
 
 for z in zones:
     dsdir = z + '_' + str(grid_size)
@@ -423,3 +423,16 @@ for z in zones:
     dsdir = join(parts_dir, z + '_' + str(grid_size))
     U_T = torch.cat((U_T, torch.load(join(dsdir, "slope_processed.ts"))), 0)
 np.save(join(unified_ds_dir, "slope_processed.npy"), U_T.numpy())
+
+
+
+
+#%% Procedural dataset formatting
+from torchvision.transforms.functional import pil_to_tensor
+
+source_dir = "D:\\Windows\\Documents\\Unity Projects\\Terrain Gen 2\\Renders\\sat" # Source of separate PNGs
+images = []
+
+for file in os.listdir(source_dir):
+    images.append(Image.open(join(source_dir, file)))
+proc_T = torch.stack([pil_to_tensor(img.convert("L")) for img in images])
